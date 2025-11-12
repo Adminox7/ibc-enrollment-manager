@@ -235,11 +235,14 @@ class REST {
 			'offset' => $offset,
 		);
 
-		$data = $this->registrations->get_registrations( $args );
+		$list = $this->registrations->get_registrations( $args );
+		$items = $list['items'] ?? array();
+		$total = isset( $list['total'] ) ? (int) $list['total'] : count( $items );
 
 		return $this->success_response(
 			array(
-				'items' => $data,
+				'items' => $items,
+				'total' => $total,
 				'page'  => $page,
 				'limit' => $per_page,
 			)

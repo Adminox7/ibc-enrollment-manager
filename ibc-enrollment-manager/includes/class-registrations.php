@@ -306,6 +306,13 @@ class Registrations {
 	 */
 	public function get_registrations( array $args = array() ): array {
 		$records = $this->db->query( $args );
+		$total   = $this->db->count_filtered(
+			array(
+				'search' => $args['search'] ?? '',
+				'niveau' => $args['niveau'] ?? '',
+				'statut' => $args['statut'] ?? '',
+			)
+		);
 		$output  = array();
 
 		foreach ( $records as $row ) {
@@ -331,7 +338,10 @@ class Registrations {
 			);
 		}
 
-		return $output;
+		return array(
+			'items' => $output,
+			'total' => $total,
+		);
 	}
 
 	/**

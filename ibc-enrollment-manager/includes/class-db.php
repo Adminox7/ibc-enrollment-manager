@@ -321,6 +321,59 @@ class DB {
 	}
 
 	/**
+	 * Count registrations matching filters.
+	 *
+	 * @param array $args Arguments.
+	 *
+	 * @return int
+	 */
+	public function count_filtered( array $args = array() ): int {
+		$defaults = array(
+			'search' => '',
+			'niveau' => '',
+			'statut' => '',
+		);
+
+		$args = wp_parse_args( $args, $defaults );
+
+		$where  = array();
+		$params = array();
+
+		if ( ! empty( $args['search'] ) ) {
+			$like     = '%' . $this->wpdb->esc_like( $args['search'] ) . '%';
+			$where[]  = '(prenom LIKE %s OR nom LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR ref LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+		}
+
+		if ( ! empty( $args['niveau'] ) ) {
+			$where[]  = 'niveau = %s';
+			$params[] = $args['niveau'];
+		}
+
+		if ( ! empty( $args['statut'] ) ) {
+			$where[]  = 'statut = %s';
+			$params[] = $args['statut'];
+		}
+
+		$sql = "SELECT COUNT(*) FROM {$this->table}";
+
+		if ( ! empty( $where ) ) {
+			$sql .= ' WHERE ' . implode( ' AND ', $where );
+		}
+
+		if ( ! empty( $params ) ) {
+			$sql = $this->wpdb->prepare( $sql, $params );
+		}
+
+		return (int) $this->wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
 	 * Soft delete registration.
 	 *
 	 * @param string $reference Reference.

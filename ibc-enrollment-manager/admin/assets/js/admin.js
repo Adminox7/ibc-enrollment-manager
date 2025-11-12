@@ -10,9 +10,84 @@
 	const state = {
 		token: sessionStorage.getItem('ibcToken') || '',
 		page: 1,
-		perPage: 50,
+		perPage: 10,
+		total: 0,
 		loading: false,
 		lastQuery: {},
+	};
+	let statusTimer = null;
+	let searchTimer = null;
+
+	const getText = (key, fallback) => {
+		if (typeof IBCDashboard.texts !== 'object' || IBCDashboard.texts === null) {
+			return fallback;
+		}
+		return typeof IBCDashboard.texts[key] !== 'undefined' ? IBCDashboard.texts[key] : fallback;
+	};
+
+	const escapeHtml = (value = '') =>
+		value
+			.toString()
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+
+	const displayOrDash = (value) => (value ? escapeHtml(value) : '—');
+
+	const parseDateValue = (value) => {
+		if (!value) {
+			return null;
+		}
+		if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+			const [day, month, year] = value.split('/');
+			const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
+			return Number.isNaN(parsed.getTime()) ? null : parsed;
+		}
+		const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+		const date = new Date(normalized);
+		return Number.isNaN(date.getTime()) ? null : date;
+	};
+
+	const formatDate = (value) => {
+		if (!value) {
+			return '—';
+		}
+		if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+			return value;
+		}
+		if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+			const [year, month, day] = value.split('-');
+			return `${day}/${month}/${year}`;
+		}
+		const date = parseDateValue(value);
+		if (!date) {
+			return value;
+		}
+		try {
+			return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(date);
+		} catch (error) {
+			return value;
+		}
+	};
+
+	const formatDateTime = (value) => {
+		if (!value) {
+			return '—';
+		}
+		const date = parseDateValue(value);
+		if (!date) {
+			return value;
+		}
+		try {
+			return new Intl.DateTimeFormat('fr-FR', {
+				dateStyle: 'short',
+				timeStyle: 'short',
+			}).format(date);
+		} catch (error) {
+			return value;
+		}
 	};
 
 	const ensureJson = async (response) => {
@@ -31,6 +106,14 @@
 		tableBody: '[data-ibc-table-body]',
 		pagination: '[data-ibc-pagination]',
 		pageIndicator: '[data-ibc-page-indicator]',
+		statusBar: '[data-ibc-status]',
+		statusText: '[data-ibc-status-text]',
+		refresh: '[data-ibc-refresh]',
+		reset: '[data-ibc-reset]',
+		export: '[data-ibc-export]',
+		logout: '[data-ibc-logout]',
+		prev: '[data-ibc-prev]',
+		next: '[data-ibc-next]',
 		loginModal: '[data-ibc-login]',
 		loginPassword: '#ibc_admin_password',
 		loginButton: '[data-ibc-login-submit]',
@@ -38,20 +121,62 @@
 		editModal: '[data-ibc-edit]',
 		editForm: '[data-ibc-edit-form]',
 		editFeedback: '[data-ibc-edit] .ibc-modal-feedback',
+		editCancel: '[data-ibc-edit-cancel]',
 		extraPreview: '[data-ibc-edit-extra]',
 		docsPreview: '[data-ibc-edit-docs]',
 		docRecto: '[data-ibc-doc="recto"]',
 		docVerso: '[data-ibc-doc="verso"]',
 		docEmpty: '[data-ibc-doc-empty]',
-		export: '[data-ibc-export]',
-		prev: '[data-ibc-prev]',
-		next: '[data-ibc-next]',
 	};
 
 	const elements = {};
 	Object.keys(selectors).forEach((key) => {
 		elements[key] = root.querySelector(selectors[key]) || document.querySelector(selectors[key]);
 	});
+
+	const setDashboardStatus = (message, variant = 'ready', timeout = 0) => {
+		if (!elements.statusBar || !elements.statusText) {
+			return;
+		}
+
+		elements.statusBar.classList.remove('is-loading', 'is-error', 'is-success');
+		if (variant === 'loading') {
+			elements.statusBar.classList.add('is-loading');
+		} else if (variant === 'error') {
+			elements.statusBar.classList.add('is-error');
+		} else if (variant === 'success') {
+			elements.statusBar.classList.add('is-success');
+		}
+
+		elements.statusText.textContent = message;
+
+		if (statusTimer) {
+			clearTimeout(statusTimer);
+		}
+
+		if (timeout > 0 && variant !== 'loading') {
+			statusTimer = setTimeout(() => {
+				if (elements.statusBar && elements.statusText) {
+					elements.statusBar.classList.remove('is-loading', 'is-error', 'is-success');
+					elements.statusText.textContent = getText('ready', 'Prêt');
+				}
+			}, timeout);
+		}
+	};
+
+	const sanitizeCsvValue = (value) =>
+		`"${(value || '')
+			.toString()
+			.replace(/\r?\n/g, ' ')
+			.replace(/"/g, '""')
+			.trim()}"`;
+
+	const cleanPhoneHref = (value) => {
+		if (!value) {
+			return '';
+		}
+		return value.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+	};
 
 	if (elements.perPage) {
 		const initial = parseInt(elements.perPage.value, 10);
@@ -105,7 +230,7 @@
 		if (!items.length) {
 			const row = document.createElement('tr');
 			row.className = 'ibc-table-empty';
-			row.innerHTML = `<td colspan="7">${IBCDashboard.texts.empty || 'Aucun résultat.'}</td>`;
+			row.innerHTML = `<td colspan="14">${getText('empty', 'Aucun résultat.')}</td>`;
 			tbody.appendChild(row);
 			return;
 		}
@@ -124,49 +249,59 @@
 			row.dataset.status = item.statut || '';
 			row.dataset.cinRecto = item.cinRectoUrl || '';
 			row.dataset.cinVerso = item.cinVersoUrl || '';
+			row.dataset.timestamp = item.timestamp || '';
+			row.dataset.birthdate = item.dateNaissance || '';
+			row.dataset.birthplace = item.lieuNaissance || '';
 
 			const safeRecto = item.cinRectoUrl ? encodeURI(item.cinRectoUrl) : '';
 			const safeVerso = item.cinVersoUrl ? encodeURI(item.cinVersoUrl) : '';
 			const docLabels = {
-				recto: IBCDashboard.texts.docRecto || 'Recto',
-				verso: IBCDashboard.texts.docVerso || 'Verso',
-				empty: IBCDashboard.texts.docMissing || 'Non fourni',
+				recto: getText('docRecto', 'Recto'),
+				verso: getText('docVerso', 'Verso'),
+				empty: getText('docMissing', 'Non fourni'),
 			};
 
-			const docChips = [];
-			if (safeRecto) {
-				docChips.push(`<a href="${safeRecto}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.recto}</a>`);
-			}
-			if (safeVerso) {
-				docChips.push(`<a href="${safeVerso}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.verso}</a>`);
-			}
+			const rectoChip = safeRecto
+				? `<a href="${safeRecto}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.recto}</a>`
+				: `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`;
+			const versoChip = safeVerso
+				? `<a href="${safeVerso}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.verso}</a>`
+				: `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`;
+
+			const messageContent = item.message
+				? `<span class="ibc-message-chip" title="${escapeHtml(item.message)}">${escapeHtml(item.message).replace(/\n/g, '<br>')}</span>`
+				: `<span class="ibc-message-chip is-empty">—</span>`;
+
+			const statusConfirm = getText('statusConfirm', 'Confirmée');
+			const statusCancel = getText('statusCancel', 'Annulée');
+			const saveLabel = getText('save', 'Sauver');
+			const deleteLabel = getText('delete', 'Supprimer');
 
 			row.innerHTML = `
+				<td data-col="timestamp">${formatDateTime(item.timestamp)}</td>
+				<td>${displayOrDash(item.prenom)}</td>
+				<td>${displayOrDash(item.nom)}</td>
+				<td>${formatDate(item.dateNaissance)}</td>
+				<td>${displayOrDash(item.lieuNaissance)}</td>
+				<td>${item.email ? `<a href="mailto:${encodeURIComponent(item.email)}">${escapeHtml(item.email)}</a>` : '—'}</td>
+				<td>${item.phone ? `<a href="tel:${cleanPhoneHref(item.phone)}">${escapeHtml(item.phone)}</a>` : '—'}</td>
+				<td>${displayOrDash(item.level)}</td>
+				<td><div class="ibc-doc-chip-group">${rectoChip}</div></td>
+				<td><div class="ibc-doc-chip-group">${versoChip}</div></td>
+				<td>${messageContent}</td>
 				<td>
-					<strong>${item.ref}</strong><br>
-					<small>${item.timestamp}</small>
+					<button type="button" class="ibc-ref-link" data-ibc-action="details">${escapeHtml(item.ref)}</button>
 				</td>
 				<td>
-					${item.fullName || `${item.prenom} ${item.nom}`}<br>
-					<small>${item.dateNaissance || ''}</small>
-				</td>
-				<td>
-					<a href="mailto:${item.email}" class="ibc-link">${item.email}</a><br>
-					<a href="tel:${item.phone}" class="ibc-link">${item.phone}</a>
-				</td>
-				<td class="ibc-table-docs">
-					<div class="ibc-doc-chip-group">
-						${docChips.length ? docChips.join('') : `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`}
-					</div>
-				</td>
-				<td>${item.level || '-'}</td>
-				<td>
-					<span class="ibc-badge ${item.statut === 'Confirme' ? 'ibc-badge-success' : 'ibc-badge-warning'}">${item.statut}</span>
+					<select class="ibc-status-select" data-ibc-status>
+						<option value="Confirme"${item.statut === 'Confirme' ? ' selected' : ''}>${statusConfirm}</option>
+						<option value="Annule"${item.statut === 'Annule' ? ' selected' : ''}>${statusCancel}</option>
+					</select>
 				</td>
 				<td>
 					<div class="ibc-row-actions">
-						<button type="button" class="ibc-link" data-ibc-action="edit">${IBCDashboard.texts.edit || 'Modifier'}</button>
-						<button type="button" class="ibc-link" data-ibc-action="delete">${IBCDashboard.texts.delete || 'Annuler'}</button>
+						<button type="button" class="ibc-button-primary" data-ibc-action="save">${saveLabel}</button>
+						<button type="button" class="ibc-button-danger" data-ibc-action="delete">${deleteLabel}</button>
 					</div>
 				</td>
 			`;
@@ -174,15 +309,18 @@
 		});
 	};
 
-	const updatePagination = (itemsCount) => {
+	const updatePagination = (itemsCount, totalCount) => {
 		if (!elements.pagination || !elements.pageIndicator) {
 			return;
 		}
 
-		const hasMore = itemsCount === state.perPage;
+		const total = typeof totalCount === 'number' ? totalCount : state.total;
+		const totalPages = total > 0 ? Math.ceil(total / state.perPage) : null;
+		const hasItems = total > 0 || itemsCount > 0;
 		const isFirst = state.page === 1;
+		const hasMore = totalPages ? state.page < totalPages : itemsCount === state.perPage;
 
-		elements.pagination.hidden = itemsCount === 0 && state.page === 1;
+		elements.pagination.hidden = !hasItems;
 
 		if (elements.prev) {
 			elements.prev.disabled = isFirst;
@@ -191,7 +329,10 @@
 			elements.next.disabled = !hasMore;
 		}
 
-		elements.pageIndicator.textContent = `${IBCDashboard.texts.page || 'Page'} ${state.page}`;
+		const pageLabel = getText('page', 'Page');
+		elements.pageIndicator.textContent = totalPages
+			? `${pageLabel} ${state.page} / ${totalPages}`
+			: `${pageLabel} ${state.page}`;
 	};
 
 	const collectFilters = () => ({
@@ -202,26 +343,72 @@
 		page: state.page,
 	});
 
+	const resetFilters = () => {
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+			searchTimer = null;
+		}
+		if (elements.search) {
+			elements.search.value = '';
+		}
+		if (elements.level) {
+			elements.level.value = '';
+		}
+		if (elements.status) {
+			elements.status.value = '';
+		}
+		if (elements.perPage) {
+			elements.perPage.value = '10';
+		}
+		state.perPage = 10;
+		state.page = 1;
+		state.total = 0;
+		loadData();
+	};
+
 	const loadData = () => {
 		if (state.loading) {
 			return;
 		}
 
 		state.loading = true;
+		setDashboardStatus(getText('loading', 'Chargement…'), 'loading');
 		const filters = collectFilters();
 		state.lastQuery = filters;
 
 		restFetch(`/regs?${new URLSearchParams(filters).toString()}`)
 			.then((data) => {
-				renderTable(data.items || []);
-				updatePagination((data.items || []).length);
+				const items = data.items || [];
+				state.total = typeof data.total === 'number' ? data.total : 0;
+
+				if (typeof data.limit === 'number' && data.limit !== state.perPage) {
+					state.perPage = data.limit;
+					if (elements.perPage) {
+						elements.perPage.value = String(data.limit);
+					}
+				}
+
+				if (typeof data.page === 'number') {
+					state.page = data.page;
+				}
+
+				renderTable(items);
+				updatePagination(items.length, state.total);
+				const message =
+					items.length === 0 && state.total === 0
+						? getText('empty', 'Aucun résultat.')
+						: getText('refreshed', 'Données mises à jour.');
+				setDashboardStatus(message, 'success', 2500);
 			})
 			.catch((error) => {
 				renderTable([]);
-				updatePagination(0);
-				showLoginError(error.message);
+				updatePagination(0, 0);
+				const message = error.message || getText('loginError', 'Mot de passe incorrect.');
+				setDashboardStatus(message, 'error');
+				showLoginError(message);
 				sessionStorage.removeItem('ibcToken');
 				state.token = '';
+				state.total = 0;
 				toggleLoginModal(true);
 			})
 			.finally(() => {
@@ -373,7 +560,9 @@
 				loadData();
 			})
 			.catch((error) => {
-				showLoginError(error.message || IBCDashboard.texts.loginError);
+				const message = error.message || getText('loginError', 'Mot de passe incorrect.');
+				showLoginError(message);
+				setDashboardStatus(message, 'error', 4000);
 			});
 	};
 
@@ -406,7 +595,9 @@
 			}),
 		})
 			.then(() => {
-				showEditFeedback(IBCDashboard.texts.saveSuccess, 'success');
+				const feedbackMessage = getText('saveSuccess', 'Inscription mise à jour.');
+				showEditFeedback(feedbackMessage, 'success');
+				setDashboardStatus(feedbackMessage, 'success', 2500);
 				loadData();
 				setTimeout(() => toggleEditModal(false), 800);
 			})
@@ -415,14 +606,48 @@
 			});
 	};
 
+	const quickSave = (row) => {
+		const id = row.dataset.id;
+		const statusSelect = row.querySelector('[data-ibc-status]');
+
+		if (!id || !statusSelect) {
+			setDashboardStatus(getText('saveError', 'Impossible d’enregistrer les modifications.'), 'error', 3000);
+			return;
+		}
+
+		const statut = statusSelect.value || 'Confirme';
+		setDashboardStatus(getText('saving', 'Enregistrement…'), 'loading');
+
+		restFetch('/reg/update', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				id,
+				fields: { statut },
+			}),
+		})
+			.then(() => {
+				setDashboardStatus(getText('saveStatus', 'Statut mis à jour.'), 'success', 2500);
+				row.dataset.status = statut;
+				loadData();
+			})
+			.catch((error) => {
+				setDashboardStatus(error.message || getText('saveError', 'Impossible d’enregistrer les modifications.'), 'error', 4000);
+			});
+	};
+
 	const deleteRow = (row) => {
 		const reference = row.dataset.ref;
 		if (!reference) {
 			return;
 		}
-		if (!window.confirm(IBCDashboard.texts.deleteConfirm)) {
+		if (!window.confirm(getText('deleteConfirm', 'Confirmer l’annulation de cette inscription ?'))) {
 			return;
 		}
+
+		setDashboardStatus(getText('deleting', 'Suppression en cours…'), 'loading');
 
 		restFetch('/reg/delete', {
 			method: 'POST',
@@ -432,47 +657,75 @@
 			body: JSON.stringify({ ref: reference }),
 		})
 			.then(() => {
+				setDashboardStatus(getText('deleteDone', 'Inscription annulée.'), 'success', 2500);
 				loadData();
-				alert(IBCDashboard.texts.deleteDone);
 			})
 			.catch((error) => {
-				alert(error.message);
+				setDashboardStatus(error.message || getText('deleteError', 'Impossible de supprimer l’inscription.'), 'error', 4000);
 			});
 	};
 
 	const exportCsv = () => {
-		const rows = root.querySelectorAll('[data-ibc-table-body] tr');
+		const rows = elements.tableBody ? elements.tableBody.querySelectorAll('tr') : [];
 		if (!rows.length || rows[0].classList.contains('ibc-table-empty')) {
 			return;
 		}
 
-		const headers = ['Référence', 'Nom', 'Email', 'Téléphone', 'Niveau', 'Statut', 'CIN Recto', 'CIN Verso', 'Date'];
-		const lines = [headers.join(',')];
+		const headers = [
+			'Date d\'inscription',
+			'Prénom',
+			'Nom',
+			'Date de naissance',
+			'Lieu de naissance',
+			'Email',
+			'Téléphone',
+			'Niveau',
+			'CIN Recto',
+			'CIN Verso',
+			'Message',
+			'Référence',
+			'Statut',
+		];
+		const lines = [headers.map((header) => sanitizeCsvValue(header)).join(',')];
 
 		rows.forEach((row) => {
+			if (row.classList.contains('ibc-table-empty')) {
+				return;
+			}
+
 			const ref = row.dataset.ref || '';
-			const fullName = row.querySelector('td:nth-child(2)').textContent.replace(/\s+/g, ' ').trim();
-			const email = (row.querySelector('a[href^="mailto:"]') || {}).textContent || '';
-			const phone = (row.querySelector('a[href^="tel:"]') || {}).textContent || '';
-			const level = row.querySelector('td:nth-child(5)').textContent.trim();
-			const status = row.querySelector('.ibc-badge').textContent.trim();
+			const prenom = row.dataset.prenom || '';
+			const nom = row.dataset.nom || '';
+			const birthdate = row.dataset.birthdate || '';
+			const birthPlace = row.dataset.birthplace || '';
+			const email = row.dataset.email || '';
+			const phone = row.dataset.phone || '';
+			const level = row.dataset.level || '';
 			const recto = row.dataset.cinRecto || '';
 			const verso = row.dataset.cinVerso || '';
-			const date = row.querySelector('td:first-child small').textContent.trim();
+			const message = (row.dataset.notes || '').replace(/\s+/g, ' ').trim();
+			const statusSelect = row.querySelector('[data-ibc-status]');
+			const statut = statusSelect ? statusSelect.value : row.dataset.status || '';
+			const timestamp = formatDateTime(row.dataset.timestamp || '');
+			const birthFormatted = formatDate(birthdate);
 
 			lines.push(
 				[
-					ref,
-					fullName,
+					timestamp,
+					prenom,
+					nom,
+					birthFormatted,
+					birthPlace,
 					email,
 					phone,
 					level,
-					status,
 					recto,
 					verso,
-					date,
+					message,
+					ref,
+					statut,
 				]
-					.map((value) => `"${value.replace(/"/g, '""')}"`)
+					.map((value) => sanitizeCsvValue(value))
 					.join(',')
 			);
 		});
@@ -486,6 +739,40 @@
 		link.click();
 		document.body.removeChild(link);
 		URL.revokeObjectURL(url);
+		setDashboardStatus(getText('exported', 'Export CSV généré.'), 'success', 2500);
+	};
+
+	const logout = () => {
+		sessionStorage.removeItem('ibcToken');
+		state.token = '';
+		state.page = 1;
+		state.perPage = 10;
+		state.total = 0;
+		state.lastQuery = {};
+		if (elements.loginPassword) {
+			elements.loginPassword.value = '';
+		}
+		if (elements.search) {
+			elements.search.value = '';
+		}
+		if (elements.level) {
+			elements.level.value = '';
+		}
+		if (elements.status) {
+			elements.status.value = '';
+		}
+		if (elements.loginFeedback) {
+			elements.loginFeedback.hidden = true;
+			elements.loginFeedback.textContent = '';
+			elements.loginFeedback.className = 'ibc-modal-feedback';
+		}
+		if (elements.perPage) {
+			elements.perPage.value = '10';
+		}
+		renderTable([]);
+		updatePagination(0, 0);
+		setDashboardStatus(getText('logoutDone', 'Déconnexion effectuée.'), 'success', 3000);
+		toggleLoginModal(true);
 	};
 
 	/* Event bindings */
@@ -502,8 +789,25 @@
 		});
 	}
 
+	if (elements.refresh) {
+		elements.refresh.addEventListener('click', () => {
+			state.page = 1;
+			loadData();
+		});
+	}
+
+	if (elements.reset) {
+		elements.reset.addEventListener('click', () => {
+			resetFilters();
+		});
+	}
+
 	if (elements.export) {
 		elements.export.addEventListener('click', exportCsv);
+	}
+
+	if (elements.logout) {
+		elements.logout.addEventListener('click', logout);
 	}
 
 	if (elements.prev) {
@@ -522,25 +826,50 @@
 		});
 	}
 
-	['search', 'level', 'status'].forEach((key) => {
-		const el = elements[key];
-		if (!el) {
-			return;
-		}
-		el.addEventListener('input', () => {
-			state.page = 1;
-			if (key === 'search') {
-				if (el.value.length < 2 && el.value.length !== 0) {
+	if (elements.search) {
+		elements.search.addEventListener('input', () => {
+			if (searchTimer) {
+				clearTimeout(searchTimer);
+			}
+			searchTimer = setTimeout(() => {
+				state.page = 1;
+				const value = elements.search.value.trim();
+				if (value.length > 0 && value.length < 2) {
 					return;
 				}
+				loadData();
+			}, 350);
+		});
+
+		elements.search.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				if (searchTimer) {
+					clearTimeout(searchTimer);
+				}
+				state.page = 1;
+				loadData();
 			}
+		});
+	}
+
+	if (elements.level) {
+		elements.level.addEventListener('change', () => {
+			state.page = 1;
 			loadData();
 		});
-	});
+	}
+
+	if (elements.status) {
+		elements.status.addEventListener('change', () => {
+			state.page = 1;
+			loadData();
+		});
+	}
 
 	if (elements.perPage) {
 		elements.perPage.addEventListener('change', () => {
-			state.perPage = parseInt(elements.perPage.value, 10) || 50;
+			state.perPage = parseInt(elements.perPage.value, 10) || 10;
 			state.page = 1;
 			loadData();
 		});
@@ -557,10 +886,16 @@
 				return;
 			}
 
-			if (action.dataset.ibcAction === 'edit') {
+			const actionType = action.dataset.ibcAction;
+			if (actionType === 'details') {
 				openEditModal(row);
+				return;
 			}
-			if (action.dataset.ibcAction === 'delete') {
+			if (actionType === 'save') {
+				quickSave(row);
+				return;
+			}
+			if (actionType === 'delete') {
 				deleteRow(row);
 			}
 		});
@@ -570,6 +905,10 @@
 		elements.editForm.addEventListener('submit', submitEdit);
 	}
 
+	if (elements.editCancel) {
+		elements.editCancel.addEventListener('click', () => toggleEditModal(false));
+	}
+
 	if (elements.editModal) {
 		elements.editModal.addEventListener('click', (event) => {
 			if (event.target === elements.editModal) {
@@ -577,6 +916,8 @@
 			}
 		});
 	}
+
+	setDashboardStatus(state.token ? getText('ready', 'Prêt') : getText('loginRequired', 'Connexion requise.'), 'ready');
 
 	if (state.token) {
 		loadData();
