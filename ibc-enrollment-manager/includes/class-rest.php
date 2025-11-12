@@ -187,7 +187,7 @@ class REST {
 	 */
 	public function handle_register( WP_REST_Request $request ): WP_REST_Response {
 		$ip_key = 'register_ip_' . ibc_get_request_ip();
-		if ( ibc_rate_limit( $ip_key, 10 ) ) {
+		if ( ibc_rate_limit( $ip_key, 10, false ) ) {
 			return $this->error_response( \__( 'Veuillez patienter avant de soumettre à nouveau.', 'ibc-enrollment-manager' ), 429 );
 		}
 
@@ -199,6 +199,8 @@ class REST {
 		if ( is_wp_error( $result ) ) {
 			return $this->error_response( $result->get_error_message(), 400 );
 		}
+
+		ibc_rate_limit( $ip_key, 10 );
 
 		return $this->success_response(
 			array(

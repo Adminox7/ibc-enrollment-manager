@@ -191,7 +191,7 @@ class Registrations {
 
 		// Rate limit per email/phone combination.
 		$rate_key = 'register_' . md5( $email_value . $phone_value );
-		if ( ibc_rate_limit( $rate_key, 10 ) ) {
+		if ( ibc_rate_limit( $rate_key, 10, false ) ) {
 			return new WP_Error( 'ibc_rate_limit', \__( 'Merci de patienter quelques instants avant de réessayer.', 'ibc-enrollment-manager' ) );
 		}
 
@@ -281,6 +281,8 @@ class Registrations {
 		}
 
 		$this->email->send_confirmation( $email_value, $context, $attachments );
+
+		ibc_rate_limit( $rate_key, 10 );
 
 		return array(
 			'id'           => $insert_id,

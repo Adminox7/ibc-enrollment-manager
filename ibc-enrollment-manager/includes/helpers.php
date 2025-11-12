@@ -281,17 +281,20 @@ function ibc_has_shortcode( string $shortcode, $post = null ): bool {
  *
  * @param string $key     Rate key.
  * @param int    $seconds Seconds.
+ * @param bool   $prime   Whether to set the limiter when not blocked.
  *
  * @return bool True when blocked.
  */
-function ibc_rate_limit( string $key, int $seconds ): bool {
+function ibc_rate_limit( string $key, int $seconds, bool $prime = true ): bool {
 	$cache_key = 'ibc_rl_' . md5( $key );
 
 	if ( get_transient( $cache_key ) ) {
 		return true;
 	}
 
-	set_transient( $cache_key, 1, $seconds );
+	if ( $prime ) {
+		set_transient( $cache_key, 1, $seconds );
+	}
 
 	return false;
 }
