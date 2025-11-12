@@ -10,302 +10,199 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Retrieve plugin options.
+ * Retrieve an option value with default.
  *
- * @return array
- */
-function ibc_get_settings(): array {
-	$defaults = array(
-		'smtp_host'            => '',
-		'smtp_port'            => '',
-		'smtp_username'        => '',
-		'smtp_password'        => '',
-		'smtp_secure'          => '',
-		'email_from_name'      => '',
-		'email_from_address'   => '',
-		'recaptcha_site_key'   => '',
-		'recaptcha_secret_key' => '',
-		'whatsapp_business_id' => '',
-		'whatsapp_token'       => '',
-		'whatsapp_template'    => '',
-		'stripe_public_key'    => '',
-		'stripe_secret_key'    => '',
-		'cmi_merchant_id'      => '',
-		'cmi_secret'           => '',
-		'delete_on_uninstall'  => 'no',
-	);
-
-	$settings = get_option( 'ibc_enrollment_settings', array() );
-
-	if ( ! is_array( $settings ) ) {
-		$settings = array();
-	}
-
-	return wp_parse_args( $settings, $defaults );
-}
-
-/**
- * Get single setting value.
- *
- * @param string $key     Setting key.
+ * @param string $key     Option key.
  * @param mixed  $default Default value.
  *
  * @return mixed
  */
-function ibc_get_setting( string $key, $default = '' ) {
-	$settings = ibc_get_settings();
+function ibc_get_option( string $key, $default = null ) {
+	$value = get_option( $key, $default );
 
-	return isset( $settings[ $key ] ) ? $settings[ $key ] : $default;
+	return null === $value ? $default : $value;
 }
 
 /**
- * Update plugin settings.
+ * Update a simple option value.
  *
- * @param array $values Values.
+ * @param string $key   Option key.
+ * @param mixed  $value Value.
  *
  * @return void
  */
-function ibc_update_settings( array $values ): void {
-	$settings = ibc_get_settings();
-	update_option( 'ibc_enrollment_settings', array_merge( $settings, $values ) );
+function ibc_update_option( string $key, $value ): void {
+	update_option( $key, $value );
 }
 
 /**
- * Sanitize phone numbers.
+ * Retrieve capacity limit option.
  *
- * @param string $phone Raw phone.
- *
- * @return string
+ * @return int
  */
-function ibc_sanitize_phone( string $phone ): string {
-	$phone = preg_replace( '/[^\d\+]/', '', $phone );
-
-	return substr( $phone, 0, 25 );
+function ibc_get_capacity_limit(): int {
+	return (int) ibc_get_option( 'ibc_capacity_limit', 1066 );
 }
 
 /**
- * Sanitize textarea content.
+ * Retrieve price option.
  *
- * @param string $value Raw value.
- *
- * @return string
+ * @return int
  */
-function ibc_sanitize_textarea( string $value ): string {
-	return wp_strip_all_tags( $value );
+function ibc_get_price_prep(): int {
+	return (int) ibc_get_option( 'ibc_price_prep', 1000 );
 }
 
 /**
- * Format currency amount.
+ * Sanitize textarea input.
  *
- * @param float  $amount  Amount.
- * @param string $currency Currency code.
+ * @param string $text Raw text.
  *
  * @return string
  */
-function ibc_format_currency( float $amount, string $currency = 'MAD' ): string {
-	$currency = strtoupper( $currency );
-
-	return sprintf( '%s %s', number_format_i18n( $amount, 2 ), $currency );
+function ibc_sanitize_textarea( string $text ): string {
+	return trim( wp_kses_post( $text ) );
 }
 
 /**
- * Get formatted datetime.
+ * Normalize email value.
  *
- * @param string      $datetime Datetime string.
- * @param string|null $format   Format.
+ * @param string $email Email value.
  *
  * @return string
  */
-function ibc_format_datetime( string $datetime, ?string $format = null ): string {
-	if ( empty( $datetime ) || '0000-00-00 00:00:00' === $datetime ) {
+function ibc_normalize_email( string $email ): string {
+	return strtolower( sanitize_email( $email ) );
+}
+
+/**
+ * Normalize phone to +212 pattern when possible.
+ *
+ * @param string $phone Phone input.
+ *
+ * @return string
+ */
+function ibc_normalize_phone( string $phone ): string {
+	$digits = preg_replace( '/[^0-9\+]/', '', $phone );
+
+	if ( empty( $digits ) ) {
 		return '';
 	}
 
-	$timestamp = strtotime( $datetime );
-	if ( ! $timestamp ) {
-		return '';
+	if ( str_starts_with( $digits, '+212' ) ) {
+		return '+212' . substr( $digits, 4 );
 	}
 
-	if ( empty( $format ) ) {
-		$format = get_option( 'date_format', 'd/m/Y' ) . ' ' . get_option( 'time_format', 'H:i' );
+	if ( str_starts_with( $digits, '0' ) && preg_match( '/^0[5-7][0-9]{8}$/', $digits ) ) {
+		return '+212' . substr( $digits, 1 );
 	}
 
-	return esc_html( wp_date( $format, $timestamp ) );
+	if ( str_starts_with( $digits, '212' ) && strlen( $digits ) >= 11 ) {
+		return '+' . $digits;
+	}
+
+	return $digits;
 }
 
 /**
- * Get the current timestamp in MySQL format.
+ * Generate registration reference.
  *
  * @return string
  */
-function ibc_current_time(): string {
-	return current_time( 'mysql' );
+function ibc_generate_reference(): string {
+	$date  = wp_date( 'Ymd' );
+	$token = strtoupper( substr( wp_generate_password( 8, false, false ), 0, 4 ) );
+
+	return sprintf( 'IBC-%s-%s', $date, $token );
 }
 
 /**
- * Verify capability.
+ * Ensure plugin uploads directory exists.
  *
- * @param string $cap Capability.
- *
- * @return bool
+ * @return array{path:string,url:string}
  */
-function ibc_current_user_can( string $cap ): bool {
-	return current_user_can( $cap );
+function ibc_get_upload_dir(): array {
+	$upload_dir = wp_upload_dir();
+	$path       = trailingslashit( $upload_dir['basedir'] ) . 'ibc-enrollment';
+	$url        = trailingslashit( $upload_dir['baseurl'] ) . 'ibc-enrollment';
+
+	if ( ! file_exists( $path ) ) {
+		wp_mkdir_p( $path );
+	}
+
+	return array(
+		'path' => $path,
+		'url'  => $url,
+	);
 }
 
 /**
- * Verify Google reCAPTCHA v3 token.
+ * Detect shortcode on post content.
  *
- * @param string $token Token from front-end.
+ * @param string          $shortcode Shortcode tag.
+ * @param int|\WP_Post|null $post Optional post.
  *
  * @return bool
  */
-function ibc_verify_recaptcha( string $token ): bool {
-	$secret = ibc_get_setting( 'recaptcha_secret_key', '' );
-	if ( empty( $secret ) ) {
+function ibc_has_shortcode( string $shortcode, $post = null ): bool {
+	$post = $post ? get_post( $post ) : get_post();
+
+	if ( ! $post instanceof \WP_Post ) {
+		return false;
+	}
+
+	if ( has_shortcode( (string) $post->post_content, $shortcode ) ) {
 		return true;
 	}
 
-	$response = wp_remote_post(
-		'https://www.google.com/recaptcha/api/siteverify',
-		array(
-			'timeout' => 10,
-			'body'    => array(
-				'secret'   => $secret,
-				'response' => sanitize_text_field( $token ),
-				'remoteip' => rest_is_ip_address( $_SERVER['REMOTE_ADDR'] ?? '' ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '',
-			),
-		)
-	);
-
-	if ( is_wp_error( $response ) ) {
-		return false;
-	}
-
-	$body = wp_remote_retrieve_body( $response );
-	if ( empty( $body ) ) {
-		return false;
-	}
-
-	$data = json_decode( $body, true );
-	if ( empty( $data ) || ! isset( $data['success'] ) ) {
-		return false;
-	}
-
-	return (bool) $data['success'];
+	return (bool) apply_filters( 'ibc_has_shortcode', false, $shortcode, $post );
 }
 
 /**
- * Prepare array value.
+ * Simple rate limiting helper.
  *
- * @param array  $array   Array.
- * @param string $key     Key.
- * @param mixed  $default Default value.
+ * @param string $key     Rate key.
+ * @param int    $seconds Seconds.
  *
- * @return mixed
+ * @return bool True when blocked.
  */
-function ibc_array_get( array $array, string $key, $default = null ) {
-	return isset( $array[ $key ] ) ? $array[ $key ] : $default;
+function ibc_rate_limit( string $key, int $seconds ): bool {
+	$cache_key = 'ibc_rl_' . md5( $key );
+
+	if ( get_transient( $cache_key ) ) {
+		return true;
+	}
+
+	set_transient( $cache_key, 1, $seconds );
+
+	return false;
 }
 
 /**
- * Normalize phone number for WhatsApp (E.164).
- *
- * @param string $phone Phone.
+ * Requester IP.
  *
  * @return string
  */
-function ibc_format_phone_for_whatsapp( string $phone ): string {
-	$phone = preg_replace( '/\D+/', '', $phone );
+function ibc_get_request_ip(): string {
+	$keys = array( 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' );
 
-	if ( empty( $phone ) ) {
-		return '';
+	foreach ( $keys as $key ) {
+		if ( ! empty( $_SERVER[ $key ] ) ) {
+			$value = sanitize_text_field( wp_unslash( (string) $_SERVER[ $key ] ) );
+			$ips   = explode( ',', $value );
+
+			return trim( $ips[0] );
+		}
 	}
 
-	if ( 0 === strpos( $phone, '0' ) ) {
-		$phone = '212' . substr( $phone, 1 );
-	}
-
-	if ( 0 !== strpos( $phone, '212' ) && 0 !== strpos( $phone, '33' ) && 0 !== strpos( $phone, '1' ) ) {
-		$phone = '212' . ltrim( $phone, '0' );
-	}
-
-	return '+' . $phone;
+	return '';
 }
 
 /**
- * Send WhatsApp template message via Cloud API.
+ * Current datetime in MySQL format.
  *
- * @param string $phone       Recipient phone (E.164 or raw).
- * @param array  $parameters  Template parameters.
- *
- * @return bool
+ * @return string
  */
-function ibc_send_whatsapp_template( string $phone, array $parameters = array() ): bool {
-	$settings = ibc_get_settings();
-
-	if (
-		empty( $settings['whatsapp_business_id'] ) ||
-		empty( $settings['whatsapp_token'] ) ||
-		empty( $settings['whatsapp_template'] )
-	) {
-		return false;
-	}
-
-	$recipient = ibc_format_phone_for_whatsapp( $phone );
-	if ( empty( $recipient ) ) {
-		return false;
-	}
-
-	$endpoint = sprintf(
-		'https://graph.facebook.com/v17.0/%s/messages',
-		rawurlencode( $settings['whatsapp_business_id'] )
-	);
-
-	$components = array(
-		array(
-			'type'       => 'body',
-			'parameters' => array(),
-		),
-	);
-
-	foreach ( $parameters as $value ) {
-		$components[0]['parameters'][] = array(
-			'type' => 'text',
-			'text' => (string) $value,
-		);
-	}
-
-	$body = array(
-		'messaging_product' => 'whatsapp',
-		'to'                => $recipient,
-		'type'              => 'template',
-		'template'          => array(
-			'name'      => $settings['whatsapp_template'],
-			'language'  => array(
-				'code' => 'fr',
-			),
-			'components'=> $components,
-		),
-	);
-
-	$response = wp_remote_post(
-		$endpoint,
-		array(
-			'timeout' => 15,
-			'headers' => array(
-				'Authorization' => 'Bearer ' . $settings['whatsapp_token'],
-				'Content-Type'  => 'application/json',
-			),
-			'body'    => wp_json_encode( $body ),
-		)
-	);
-
-	if ( is_wp_error( $response ) ) {
-		return false;
-	}
-
-	$code = wp_remote_retrieve_response_code( $response );
-
-	return $code >= 200 && $code < 300;
+function ibc_now(): string {
+	return current_time( 'mysql' );
 }
