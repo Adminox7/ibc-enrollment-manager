@@ -39,6 +39,10 @@
 		editForm: '[data-ibc-edit-form]',
 		editFeedback: '[data-ibc-edit] .ibc-modal-feedback',
 		extraPreview: '[data-ibc-edit-extra]',
+		docsPreview: '[data-ibc-edit-docs]',
+		docRecto: '[data-ibc-doc="recto"]',
+		docVerso: '[data-ibc-doc="verso"]',
+		docEmpty: '[data-ibc-doc-empty]',
 		export: '[data-ibc-export]',
 		prev: '[data-ibc-prev]',
 		next: '[data-ibc-next]',
@@ -101,7 +105,7 @@
 		if (!items.length) {
 			const row = document.createElement('tr');
 			row.className = 'ibc-table-empty';
-			row.innerHTML = `<td colspan="6">${IBCDashboard.texts.empty || 'Aucun résultat.'}</td>`;
+			row.innerHTML = `<td colspan="7">${IBCDashboard.texts.empty || 'Aucun résultat.'}</td>`;
 			tbody.appendChild(row);
 			return;
 		}
@@ -118,6 +122,25 @@
 			row.dataset.phone = item.phone || '';
 			row.dataset.level = item.level || '';
 			row.dataset.status = item.statut || '';
+			row.dataset.cinRecto = item.cinRectoUrl || '';
+			row.dataset.cinVerso = item.cinVersoUrl || '';
+
+			const safeRecto = item.cinRectoUrl ? encodeURI(item.cinRectoUrl) : '';
+			const safeVerso = item.cinVersoUrl ? encodeURI(item.cinVersoUrl) : '';
+			const docLabels = {
+				recto: IBCDashboard.texts.docRecto || 'Recto',
+				verso: IBCDashboard.texts.docVerso || 'Verso',
+				empty: IBCDashboard.texts.docMissing || 'Non fourni',
+			};
+
+			const docChips = [];
+			if (safeRecto) {
+				docChips.push(`<a href="${safeRecto}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.recto}</a>`);
+			}
+			if (safeVerso) {
+				docChips.push(`<a href="${safeVerso}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.verso}</a>`);
+			}
+
 			row.innerHTML = `
 				<td>
 					<strong>${item.ref}</strong><br>
@@ -130,6 +153,11 @@
 				<td>
 					<a href="mailto:${item.email}" class="ibc-link">${item.email}</a><br>
 					<a href="tel:${item.phone}" class="ibc-link">${item.phone}</a>
+				</td>
+				<td class="ibc-table-docs">
+					<div class="ibc-doc-chip-group">
+						${docChips.length ? docChips.join('') : `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`}
+					</div>
 				</td>
 				<td>${item.level || '-'}</td>
 				<td>
@@ -287,6 +315,38 @@
 			}
 		}
 
+		const docsContainer = elements.docsPreview;
+		if (docsContainer) {
+			const rectoLink = elements.docRecto || docsContainer.querySelector('[data-ibc-doc="recto"]');
+			const versoLink = elements.docVerso || docsContainer.querySelector('[data-ibc-doc="verso"]');
+			const emptyBadge = elements.docEmpty || docsContainer.querySelector('[data-ibc-doc-empty]');
+
+			const hasRecto = Boolean(row.dataset.cinRecto);
+			const hasVerso = Boolean(row.dataset.cinVerso);
+			const hasDocs = hasRecto || hasVerso;
+
+			const rectoUrl = hasRecto ? encodeURI(row.dataset.cinRecto) : '#';
+			const versoUrl = hasVerso ? encodeURI(row.dataset.cinVerso) : '#';
+
+			docsContainer.hidden = !hasDocs && !emptyBadge;
+
+			if (rectoLink) {
+				rectoLink.href = rectoUrl;
+				rectoLink.hidden = !hasRecto;
+			}
+
+			if (versoLink) {
+				versoLink.href = versoUrl;
+				versoLink.hidden = !hasVerso;
+			}
+
+			if (emptyBadge) {
+				emptyBadge.hidden = hasDocs;
+			}
+
+			docsContainer.classList.toggle('is-empty', !hasDocs);
+		}
+
 		toggleEditModal(true);
 	};
 
@@ -386,7 +446,7 @@
 			return;
 		}
 
-		const headers = ['Référence', 'Nom', 'Email', 'Téléphone', 'Niveau', 'Statut', 'Date'];
+		const headers = ['Référence', 'Nom', 'Email', 'Téléphone', 'Niveau', 'Statut', 'CIN Recto', 'CIN Verso', 'Date'];
 		const lines = [headers.join(',')];
 
 		rows.forEach((row) => {
@@ -394,8 +454,10 @@
 			const fullName = row.querySelector('td:nth-child(2)').textContent.replace(/\s+/g, ' ').trim();
 			const email = (row.querySelector('a[href^="mailto:"]') || {}).textContent || '';
 			const phone = (row.querySelector('a[href^="tel:"]') || {}).textContent || '';
-			const level = row.querySelector('td:nth-child(4)').textContent.trim();
+			const level = row.querySelector('td:nth-child(5)').textContent.trim();
 			const status = row.querySelector('.ibc-badge').textContent.trim();
+			const recto = row.dataset.cinRecto || '';
+			const verso = row.dataset.cinVerso || '';
 			const date = row.querySelector('td:first-child small').textContent.trim();
 
 			lines.push(
@@ -406,6 +468,8 @@
 					phone,
 					level,
 					status,
+					recto,
+					verso,
 					date,
 				]
 					.map((value) => `"${value.replace(/"/g, '""')}"`)
