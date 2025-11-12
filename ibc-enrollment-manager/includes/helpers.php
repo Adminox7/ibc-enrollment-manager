@@ -54,6 +54,124 @@ function ibc_get_price_prep(): int {
 }
 
 /**
+ * Retrieve configured brand colors.
+ *
+ * @return array{primary:string,secondary:string,text:string,muted:string,border:string,button:string,button_text:string,success_bg:string,success_text:string,error_bg:string,error_text:string}
+ */
+function ibc_get_brand_colors(): array {
+	$defaults = array(
+		'primary'      => '#e94162',
+		'secondary'    => '#0f172a',
+		'text'         => '#1f2937',
+		'muted'        => '#f8fafc',
+		'border'       => '#e2e8f0',
+		'button'       => '#e94162',
+		'button_text'  => '#ffffff',
+		'success_bg'   => '#dcfce7',
+		'success_text' => '#166534',
+		'error_bg'     => '#fee2e2',
+		'error_text'   => '#991b1b',
+	);
+
+	$keys = array_keys( $defaults );
+	$colors = array();
+
+	foreach ( $keys as $key ) {
+		$option_key      = 'ibc_brand_' . $key;
+		$value           = get_option( $option_key, $defaults[ $key ] );
+		$sanitized       = sanitize_hex_color( $value );
+		$colors[ $key ]  = $sanitized ? $sanitized : (string) $value;
+
+		if ( empty( $colors[ $key ] ) ) {
+			$colors[ $key ] = $defaults[ $key ];
+		}
+	}
+
+	return array_merge( $defaults, $colors );
+}
+
+/**
+ * Merge legacy brand colors array into new options if available.
+ *
+ * @return array
+ */
+function ibc_get_brand_colors_with_legacy(): array {
+	$colors = ibc_get_brand_colors();
+	$legacy = get_option( 'ibc_brand_colors', array() );
+
+	if ( is_array( $legacy ) ) {
+		$map = array(
+			'primary'   => 'primary',
+			'secondary' => 'secondary',
+			'text'      => 'text',
+			'muted'     => 'muted',
+			'border'    => 'border',
+		);
+
+		foreach ( $map as $legacy_key => $new_key ) {
+			if ( ! empty( $legacy[ $legacy_key ] ) && sanitize_hex_color( $legacy[ $legacy_key ] ) ) {
+				$colors[ $new_key ] = sanitize_hex_color( $legacy[ $legacy_key ] );
+			}
+		}
+	}
+
+	return $colors;
+}
+
+/**
+ * Retrieve a specific brand color.
+ *
+ * @param string $key Color key.
+ *
+ * @return string
+ */
+function ibc_get_brand_color( string $key ): string {
+	$colors = ibc_get_brand_colors_with_legacy();
+
+	return $colors[ $key ] ?? '';
+}
+
+/**
+ * Retrieve payment details.
+ *
+ * @return array<string,string>
+ */
+function ibc_get_payment_details(): array {
+	$fields = array(
+		'bank_name'      => '',
+		'account_holder' => '',
+		'rib'            => '',
+		'iban'           => '',
+		'bic'            => '',
+		'agency'         => '',
+		'payment_note'   => __( 'Paiement non remboursable, à effectuer sous 24h.', 'ibc-enrollment-manager' ),
+	);
+
+	foreach ( $fields as $key => $default ) {
+		$option_key         = 'ibc_' . $key;
+		$fields[ $key ]     = (string) get_option( $option_key, $default );
+	}
+
+	$legacy_map = array(
+		'bank_name'      => 'ibc_brand_bankName',
+		'account_holder' => 'ibc_brand_accountHolder',
+		'rib'            => 'ibc_brand_rib',
+		'iban'           => 'ibc_brand_iban',
+		'bic'            => 'ibc_brand_bic',
+		'agency'         => 'ibc_brand_agency',
+		'payment_note'   => 'ibc_brand_paymentNote',
+	);
+
+	foreach ( $legacy_map as $key => $legacy_option ) {
+		if ( empty( $fields[ $key ] ) ) {
+			$fields[ $key ] = (string) get_option( $legacy_option, $fields[ $key ] );
+		}
+	}
+
+	return $fields;
+}
+
+/**
  * Sanitize textarea input.
  *
  * @param string $text Raw text.

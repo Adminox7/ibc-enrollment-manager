@@ -15,6 +15,14 @@
 		lastQuery: {},
 	};
 
+	const ensureJson = async (response) => {
+		const contentType = (response.headers.get('content-type') || '').toLowerCase();
+		if (!contentType.includes('application/json')) {
+			throw new Error(IBCDashboard.texts.nonJson || 'Réponse invalide.');
+		}
+		return response.json();
+	};
+
 	const selectors = {
 		search: '#ibc_filter_search',
 		level: '#ibc_filter_level',
@@ -30,6 +38,7 @@
 		editModal: '[data-ibc-edit]',
 		editForm: '[data-ibc-edit-form]',
 		editFeedback: '[data-ibc-edit] .ibc-modal-feedback',
+		extraPreview: '[data-ibc-edit-extra]',
 		export: '[data-ibc-export]',
 		prev: '[data-ibc-prev]',
 		next: '[data-ibc-next]',
@@ -60,7 +69,7 @@
 			...options,
 			headers,
 		}).then(async (response) => {
-			const payload = await response.json();
+			const payload = await ensureJson(response);
 			if (!payload.success) {
 				const message = payload.message || IBCDashboard.texts.loginError;
 				throw new Error(message);
@@ -102,6 +111,7 @@
 			row.dataset.id = item.row;
 			row.dataset.ref = item.ref;
 			row.dataset.notes = item.message || '';
+			row.dataset.extra = JSON.stringify(item.extraFields || []);
 			row.dataset.prenom = item.prenom || '';
 			row.dataset.nom = item.nom || '';
 			row.dataset.email = item.email || '';
@@ -235,6 +245,46 @@
 		const notesField = elements.editForm.querySelector('#ibc_edit_notes');
 		if (notesField) {
 			notesField.value = row.dataset.notes || '';
+		}
+
+		const extraContainer = elements.extraPreview;
+		if (extraContainer) {
+			let extras = [];
+			try {
+				extras = row.dataset.extra ? JSON.parse(row.dataset.extra) : [];
+			} catch (error) {
+				extras = [];
+			}
+
+			if (extras && extras.length) {
+				extraContainer.hidden = false;
+				const list = extras
+					.filter((entry) => entry && entry.value)
+					.map((entry) => {
+						const label = (entry.label || entry.id || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+						let value = entry.display || entry.value;
+						if (entry.type === 'file' && entry.value) {
+							const safeUrl = encodeURI(entry.value);
+							value = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${IBCDashboard.texts.download || 'Télécharger'}</a>`;
+						} else {
+							value = (value || '')
+								.toString()
+								.replace(/&/g, '&amp;')
+								.replace(/</g, '&lt;')
+								.replace(/>/g, '&gt;');
+						}
+						return `<li><strong>${label}</strong> : ${value}</li>`;
+					})
+					.join('');
+
+				extraContainer.innerHTML = `
+					<h4>${IBCDashboard.texts.extraTitle || 'Informations complémentaires'}</h4>
+					<ul>${list}</ul>
+				`;
+			} else {
+				extraContainer.hidden = true;
+				extraContainer.innerHTML = '';
+			}
 		}
 
 		toggleEditModal(true);

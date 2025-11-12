@@ -206,6 +206,8 @@ class REST {
 				'receiptUrl'  => $result['downloadUrl'],
 				'receiptId'   => $result['receiptId'],
 				'createdAt'   => $result['createdAt'],
+				'extraFields' => $result['extraFields'] ?? array(),
+				'notes'       => $result['messageNotes'] ?? '',
 			),
 			201
 		);

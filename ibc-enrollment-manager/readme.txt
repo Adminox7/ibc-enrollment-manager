@@ -16,19 +16,21 @@ IBC Enrollment Manager remplace le flux Google Apps Script historique par un plu
 Fonctionnalités clés :
 
 * Table personnalisée `wp_ibc_registrations` (InnoDB, indexes email/téléphone/statut).
-* Formulaire front moderne (`[ibc_register]`) avec contrôle capacité + anti-doublon temps réel.
+* Formulaire front moderne (`[ibc_register]`) piloté par le Form Builder (champs dynamiques, rendu fidèle, couleurs injectées).
 * Dashboard front sécurisé (`[ibc_admin_dashboard]`) : recherche, filtres, éditions inline, annulation, export CSV.
 * API REST (`ibc/v1`) : login, check capacité, register multipart, list/update/delete admin.
 * Génération de récépissés PDF (fallback si Dompdf indisponible) et e-mail de confirmation HTML.
-* Page de réglages (Branding, Paiement, Contact, Sécurité, Capacité & Prix).
+* Form Builder drag & drop, prévisualisation, configuration des couleurs et champs personnalisés.
+* Page de réglages (Capacité & Prix, Branding, Paiement, Contact, Sécurité, Form Builder).
 * Upload sécurisé des justificatifs (CIN recto/verso – JPG/PNG/PDF).
 * Internationalisation prête (`ibc-enrollment-manager`).
+* Réponses REST strictement JSON (le front rejette toute réponse inattendue).
 
 == Installation ==
 
 1. Dézippez le dossier `ibc-enrollment-manager` dans `wp-content/plugins/`.
 2. Activez l’extension via le menu *Extensions*.
-3. Rendez-vous dans *Réglages → IBC Enrollment* pour définir capacité, branding, coordonnées bancaires, contact et mot de passe admin.
+3. Rendez-vous dans *Réglages → IBC Enrollment* pour définir la capacité, le branding, les coordonnées bancaires, le contact, la sécurité et configurer le Form Builder.
 4. Ajoutez les shortcodes sur vos pages publiques :
 	* `[ibc_register]` : formulaire de préinscription.
 	* `[ibc_admin_dashboard]` : interface opérateur (protégée par mot de passe jeton).
@@ -49,7 +51,7 @@ Namespace : `ibc/v1`
 
 * `POST /login` – Entrée : `password`. Retourne `token`, `ttl`. Stocke un transient `ibc_tok_{hash}` (2h). Fallback sur ancienne option `ibc_admin_password_plain` si le hash n’est pas encore défini.
 * `GET /check` – Params : `email`, `phone`. Réponse : `capacity`, `total`, `existsEmail`, `existsPhone`.
-* `POST /register` – Multipart (champs form, fichiers `cin_recto`, `cin_verso`). Crée la ligne BDD, génère le PDF, envoie l’e-mail. Retourne `ref`, `downloadUrl`, `receiptId`.
+* `POST /register` – Multipart (champs form, fichiers `cin_recto`, `cin_verso`). Crée la ligne BDD, génère le PDF, envoie l’e-mail. Retourne `ref`, `downloadUrl`, `receiptId`, `notes`, `extraFields`.
 * `GET /regs` – (Token requis) Liste paginable filtrable (`search`, `niveau`, `statut`, `page`, `per_page`).
 * `POST /reg/update` – (Token) Params : `id` + `fields{}`. Mets à jour les colonnes autorisées.
 * `POST /reg/delete` – (Token) Param : `ref`. Effectue un soft delete (`statut = Annule`).
@@ -60,11 +62,13 @@ Toutes les réponses ont la forme `{ success: bool, data|message }` avec codes H
 
 * `ibc_capacity_limit` (int) – capacité maximale (défaut 1066).
 * `ibc_price_prep` (int) – prix en MAD (défaut 1000).
-* `ibc_brand_colors` (array) – primary, secondary, text, muted, border.
-* `ibc_brand_bankName`, `ibc_brand_accountHolder`, `ibc_brand_rib`, `ibc_brand_iban`, `ibc_brand_bic`, `ibc_brand_agency`, `ibc_brand_paymentNote`.
+* `ibc_brand_primary`, `ibc_brand_secondary`, `ibc_brand_text`, `ibc_brand_muted`, `ibc_brand_border`, `ibc_brand_button`, `ibc_brand_button_text`, `ibc_brand_success_bg`, `ibc_brand_success_text`, `ibc_brand_error_bg`, `ibc_brand_error_text`.
+* `ibc_bank_name`, `ibc_account_holder`, `ibc_rib`, `ibc_iban`, `ibc_bic`, `ibc_agency`, `ibc_payment_note`.
 * `ibc_contact_address`, `ibc_contact_email`, `ibc_contact_phone`, `ibc_contact_landline`.
 * `ibc_admin_password_hash` – hash BCrypt du mot de passe admin.
-* `ibc_last_token_issued` – horodatage du dernier jeton délivré.
+* `ibc_active_tokens` – liste des jetons actifs (hashes).
+* `ibc_last_token_issued` – dernier jeton délivré (clair pour rappel).
+* `ibc_form_schema` – schéma JSON des champs Form Builder.
 
 == PDF ==
 

@@ -70,25 +70,17 @@ class PDF {
 	 * @return string
 	 */
 	private function build_html( array $data ): string {
-		$colors = get_option(
-			'ibc_brand_colors',
-			array(
-				'primary'   => '#e94162',
-				'secondary' => '#0f172a',
-				'text'      => '#1f2937',
-				'muted'     => '#f8fafc',
-				'border'    => '#e2e8f0',
-			)
-		);
+		$colors = ibc_get_brand_colors_with_legacy();
 
-		$bank = array(
-			'bankName'      => (string) get_option( 'ibc_brand_bankName', '' ),
-			'accountHolder' => (string) get_option( 'ibc_brand_accountHolder', '' ),
-			'rib'           => (string) get_option( 'ibc_brand_rib', '' ),
-			'iban'          => (string) get_option( 'ibc_brand_iban', '' ),
-			'bic'           => (string) get_option( 'ibc_brand_bic', '' ),
-			'agency'        => (string) get_option( 'ibc_brand_agency', '' ),
-			'paymentNote'   => (string) get_option( 'ibc_brand_paymentNote', '' ),
+		$details = ibc_get_payment_details();
+		$bank    = array(
+			'bankName'      => $details['bank_name'] ?? '',
+			'accountHolder' => $details['account_holder'] ?? '',
+			'rib'           => $details['rib'] ?? '',
+			'iban'          => $details['iban'] ?? '',
+			'bic'           => $details['bic'] ?? '',
+			'agency'        => $details['agency'] ?? '',
+			'paymentNote'   => $details['payment_note'] ?? '',
 		);
 
 		$rows = array(
@@ -141,6 +133,36 @@ class PDF {
 					<?php endforeach; ?>
 					</tbody>
 				</table>
+
+				<?php if ( ! empty( $data['notes'] ) ) : ?>
+					<div class="section">
+						<h2><?php echo \esc_html__( 'Message du candidat', 'ibc-enrollment-manager' ); ?></h2>
+						<p><?php echo nl2br( esc_html( $data['notes'] ) ); ?></p>
+					</div>
+				<?php endif; ?>
+
+				<?php if ( ! empty( $data['extra'] ) && is_array( $data['extra'] ) ) : ?>
+					<div class="section">
+						<h2><?php echo \esc_html__( 'Informations complémentaires', 'ibc-enrollment-manager' ); ?></h2>
+						<ul class="bank-list">
+							<?php foreach ( $data['extra'] as $entry ) : ?>
+								<?php
+								if ( empty( $entry['value'] ) ) {
+									continue;
+								}
+								$label = esc_html( $entry['label'] ?? $entry['id'] ?? '' );
+								$value = $entry['value'];
+								if ( ( $entry['type'] ?? '' ) === 'file' && filter_var( $value, FILTER_VALIDATE_URL ) ) {
+									$value_display = esc_url( $value );
+								} else {
+									$value_display = esc_html( (string) ( $entry['display'] ?? $value ) );
+								}
+								?>
+								<li><?php echo $label . ' : ' . $value_display; ?></li>
+							<?php endforeach; ?>
+						</ul>
+					</div>
+				<?php endif; ?>
 
 				<div class="section">
 					<h2><?php echo \esc_html__( 'Récapitulatif paiement', 'ibc-enrollment-manager' ); ?></h2>

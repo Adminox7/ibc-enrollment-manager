@@ -66,6 +66,13 @@ class Loader {
 	private Shortcodes $shortcodes;
 
 	/**
+	 * Form builder service.
+	 *
+	 * @var FormBuilder
+	 */
+	private FormBuilder $form_builder;
+
+	/**
 	 * REST API handler.
 	 *
 	 * @var REST
@@ -104,14 +111,15 @@ class Loader {
 	 * Constructor.
 	 */
 	private function __construct() {
-		$this->settings      = new Settings();
+		$this->form_builder  = new FormBuilder();
+		$this->settings      = new Settings( $this->form_builder );
 		$db                  = DB::instance();
 		$email               = new Email();
-		$pdf                  = new PDF();
-		$this->registrations = new Registrations( $db, $email, $pdf );
+		$pdf                 = new PDF();
+		$this->registrations = new Registrations( $db, $email, $pdf, $this->form_builder );
 		$this->auth          = new Auth();
-		$this->assets        = new Assets();
-		$this->shortcodes    = new Shortcodes( $this->registrations, $this->auth );
+		$this->assets        = new Assets( $this->form_builder );
+		$this->shortcodes    = new Shortcodes( $this->registrations, $this->auth, $this->form_builder );
 		$this->rest          = new REST( $this->registrations, $this->auth );
 
 		add_action( 'plugins_loaded', array( $this, 'on_plugins_loaded' ) );
@@ -128,6 +136,7 @@ class Loader {
 			'includes/class-deactivator.php',
 			'includes/class-uninstall.php',
 			'includes/class-db.php',
+			'includes/class-formbuilder.php',
 			'includes/class-settings.php',
 			'includes/class-auth.php',
 			'includes/class-assets.php',
@@ -141,6 +150,8 @@ class Loader {
 		foreach ( $files as $file ) {
 			require_once IBC_ENROLLMENT_PATH . $file;
 		}
+
+		require_once IBC_ENROLLMENT_PATH . 'admin/class-admin-page.php';
 
 		$dompdf_autoload = IBC_ENROLLMENT_PATH . 'vendor/dompdf/autoload.inc.php';
 		if ( file_exists( $dompdf_autoload ) ) {
