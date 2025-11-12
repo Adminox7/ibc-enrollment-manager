@@ -1,0 +1,267 @@
+/**
+ * Dashboard & settings styles.
+ */
+
+.ibc-dashboard {
+	max-width: 1200px;
+	margin: 3rem auto;
+	padding: 0 1.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+}
+
+.ibc-dashboard-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.ibc-dashboard-header h2 {
+	margin: 0;
+	font-size: 2rem;
+	color: #0f172a;
+}
+
+.ibc-dashboard-toolbar {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 1rem;
+	background: #ffffff;
+	border-radius: 16px;
+	padding: 1.5rem;
+	border: 1px solid rgba(15, 23, 42, 0.08);
+	box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.2);
+}
+
+.ibc-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.ibc-field label {
+	font-weight: 600;
+	color: #334155;
+}
+
+.ibc-field input,
+.ibc-field select {
+	padding: 0.65rem 0.8rem;
+	border-radius: 10px;
+	border: 1px solid #cbd5f5;
+	font-size: 0.95rem;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ibc-field input:focus,
+.ibc-field select:focus {
+	outline: none;
+	border-color: #6366f1;
+	box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.16);
+}
+
+.ibc-table-wrapper {
+	background: #ffffff;
+	border-radius: 18px;
+	border: 1px solid rgba(15, 23, 42, 0.08);
+	box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.18);
+	overflow: hidden;
+}
+
+.ibc-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.ibc-table thead {
+	background: #f1f5f9;
+	color: #0f172a;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 0.75rem;
+}
+
+.ibc-table th,
+.ibc-table td {
+	padding: 1rem 1.2rem;
+	border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+	vertical-align: top;
+}
+
+.ibc-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.ibc-table-empty td {
+	text-align: center;
+	color: #64748b;
+}
+
+.ibc-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.25rem 0.75rem;
+	border-radius: 999px;
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+.ibc-badge-success {
+	background: rgba(34, 197, 94, 0.12);
+	color: #15803d;
+}
+
+.ibc-badge-warning {
+	background: rgba(248, 113, 113, 0.12);
+	color: #b91c1c;
+}
+
+.ibc-row-actions {
+	display: inline-flex;
+	gap: 0.5rem;
+}
+
+.ibc-link {
+	color: #0f172a;
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.ibc-link:hover {
+	color: #e94162;
+}
+
+.ibc-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 1rem;
+}
+
+.ibc-button-primary,
+.ibc-button-secondary {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.7rem 1.6rem;
+	border-radius: 999px;
+	font-weight: 600;
+	border: none;
+	cursor: pointer;
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ibc-button-primary {
+	background: #e94162;
+	color: #ffffff;
+	box-shadow: 0 14px 24px -18px rgba(233, 65, 98, 0.6);
+}
+
+.ibc-button-primary:hover {
+	transform: translateY(-1px);
+}
+
+.ibc-button-secondary {
+	background: #ffffff;
+	color: #0f172a;
+	border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.ibc-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: grid;
+	place-items: center;
+	background: rgba(15, 23, 42, 0.6);
+	padding: 1.5rem;
+}
+
+.ibc-modal-card {
+	width: min(520px, 100%);
+	background: #ffffff;
+	border-radius: 16px;
+	padding: 2rem;
+	box-shadow: 0 40px 80px -50px rgba(15, 23, 42, 0.8);
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.ibc-modal-card h3 {
+	margin: 0;
+	font-size: 1.5rem;
+	color: #0f172a;
+}
+
+.ibc-modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.75rem;
+}
+
+.ibc-modal-feedback {
+	padding: 0.75rem 1rem;
+	border-radius: 10px;
+	background: #fee2e2;
+	color: #991b1b;
+	font-weight: 500;
+}
+
+/* Settings page */
+.ibc-settings-page .nav-tab-wrapper {
+	margin-top: 1.5rem;
+	margin-bottom: 1.5rem;
+}
+
+.ibc-settings-page .nav-tab-active {
+	background: #e94162;
+	color: #ffffff;
+	border-color: #e94162;
+}
+
+.ibc-settings-form .form-table th {
+	padding: 1rem 0.5rem 1rem 0;
+}
+
+.ibc-settings-form input[type="text"],
+.ibc-settings-form input[type="number"],
+.ibc-settings-form input[type="email"],
+.ibc-settings-form input[type="password"],
+.ibc-settings-form textarea {
+	width: 100%;
+	max-width: 420px;
+	padding: 0.55rem 0.75rem;
+	border-radius: 8px;
+	border: 1px solid #cbd5f5;
+}
+
+.ibc-settings-form textarea.large-text {
+	max-width: 560px;
+}
+
+@media (max-width: 960px) {
+	.ibc-dashboard-toolbar {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 640px) {
+	.ibc-dashboard {
+		margin: 2rem auto;
+		padding: 0 1rem;
+	}
+
+	.ibc-dashboard-toolbar {
+		grid-template-columns: 1fr;
+	}
+
+	.ibc-dashboard-header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+}
