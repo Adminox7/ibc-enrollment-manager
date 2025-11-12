@@ -584,6 +584,10 @@ class Registrations {
 			return new WP_Error( 'ibc_upload_type', \__( 'Format de fichier non autorisé.', 'ibc-enrollment-manager' ) );
 		}
 
+		if ( ! function_exists( 'wp_handle_upload' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
 		$uploaded = wp_handle_upload(
 			$file,
 			array(
