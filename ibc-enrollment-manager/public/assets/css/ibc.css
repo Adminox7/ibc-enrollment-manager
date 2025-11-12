@@ -1,0 +1,174 @@
+/**
+ * IBC Enrollment styles.
+ */
+
+.ibc-sessions-list {
+	display: grid;
+	gap: 1.5rem;
+	margin: 2rem 0;
+}
+
+.ibc-session-card {
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 1.5rem;
+	background: #ffffff;
+	box-shadow: 0 6px 12px -10px rgba(15, 23, 42, 0.35);
+}
+
+.ibc-session-title {
+	margin-top: 0;
+}
+
+.ibc-session-meta {
+	list-style: none;
+	margin: 1rem 0;
+	padding: 0;
+}
+
+.ibc-session-meta li + li {
+	margin-top: 0.3rem;
+}
+
+.ibc-button {
+	display: inline-block;
+	padding: 0.75rem 1.8rem;
+	background-color: #e94162;
+	color: #ffffff;
+	border-radius: 4px;
+	text-decoration: none;
+	border: none;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.ibc-button:hover,
+.ibc-button:focus {
+	background-color: #d03050;
+	color: #ffffff;
+}
+
+.ibc-register-form {
+	max-width: 540px;
+	margin: 2rem auto;
+	padding: 2rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	background: #ffffff;
+	box-shadow: 0 6px 12px -10px rgba(30, 41, 59, 0.35);
+}
+
+.ibc-register-form h3 {
+	margin-top: 0;
+	text-align: center;
+}
+
+.ibc-form-group {
+	margin-bottom: 1rem;
+	display: flex;
+	flex-direction: column;
+}
+
+.ibc-form-group label {
+	font-weight: 600;
+	margin-bottom: 0.5rem;
+}
+
+.ibc-form-group input {
+	padding: 0.65rem;
+	border: 1px solid #cbd5f5;
+	border-radius: 4px;
+	font-size: 1rem;
+}
+
+.ibc-form-group input:focus {
+	outline: none;
+	border-color: #6366f1;
+	box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3);
+}
+
+.ibc-form-notice {
+	margin-bottom: 1rem;
+	padding: 0.75rem 1rem;
+	border-radius: 4px;
+}
+
+.ibc-form-notice.ibc-error {
+	background-color: #fee2e2;
+	color: #b91c1c;
+}
+
+.ibc-form-notice.ibc-success {
+	background-color: #dcfce7;
+	color: #15803d;
+}
+
+/* Admin helpers */
+.ibc-admin-page .ibc-metrics-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+.ibc-card {
+	background: #ffffff;
+	padding: 1.5rem;
+	border-radius: 8px;
+	border: 1px solid #e2e8f0;
+	box-shadow: 0 6px 12px -12px rgba(15, 23, 42, 0.35);
+}
+
+.ibc-metric-value {
+	font-size: 2.25rem;
+	margin: 0;
+}
+
+.ibc-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+	gap: 1.5rem;
+	margin-top: 2rem;
+}
+
+.ibc-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	margin: 1.5rem 0;
+	gap: 1rem;
+}
+
+.ibc-filter-form input[type="search"],
+.ibc-filter-form select {
+	padding: 0.4rem 0.6rem;
+	margin-right: 0.5rem;
+}
+
+.ibc-inline-form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.ibc-inline-form select,
+.ibc-inline-form input {
+	padding: 0.25rem 0.5rem;
+}
+
+.ibc-toolbar-actions .button {
+	margin-right: 0.5rem;
+}
+
+@media (max-width: 600px) {
+	.ibc-inline-form {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.ibc-form-group {
+		margin-bottom: 1.25rem;
+	}
+}
