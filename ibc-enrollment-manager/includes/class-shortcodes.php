@@ -274,6 +274,7 @@ class Shortcodes {
 							<th><?php esc_html_e( 'Référence', 'ibc-enrollment-manager' ); ?></th>
 							<th><?php esc_html_e( 'Nom complet', 'ibc-enrollment-manager' ); ?></th>
 							<th><?php esc_html_e( 'Coordonnées', 'ibc-enrollment-manager' ); ?></th>
+							<th><?php esc_html_e( 'CIN', 'ibc-enrollment-manager' ); ?></th>
 							<th><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></th>
 							<th><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></th>
 							<th><?php esc_html_e( 'Actions', 'ibc-enrollment-manager' ); ?></th>
@@ -281,7 +282,7 @@ class Shortcodes {
 					</thead>
 					<tbody data-ibc-table-body>
 						<tr class="ibc-table-empty">
-							<td colspan="6"><?php esc_html_e( 'Chargement en cours…', 'ibc-enrollment-manager' ); ?></td>
+							<td colspan="7"><?php esc_html_e( 'Chargement en cours…', 'ibc-enrollment-manager' ); ?></td>
 						</tr>
 					</tbody>
 				</table>
@@ -348,6 +349,14 @@ class Shortcodes {
 					</div>
 					<input type="hidden" name="id" value="">
 				</form>
+				<div class="ibc-edit-docs" data-ibc-edit-docs hidden>
+					<h4><?php esc_html_e( 'Pièce d’identité', 'ibc-enrollment-manager' ); ?></h4>
+					<div class="ibc-edit-docs__grid">
+						<a href="#" class="ibc-doc-chip" data-ibc-doc="recto" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Voir le recto', 'ibc-enrollment-manager' ); ?></a>
+						<a href="#" class="ibc-doc-chip" data-ibc-doc="verso" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Voir le verso', 'ibc-enrollment-manager' ); ?></a>
+						<span class="ibc-doc-chip is-muted" data-ibc-doc-empty hidden><?php esc_html_e( 'Aucun document disponible', 'ibc-enrollment-manager' ); ?></span>
+					</div>
+				</div>
 				<div class="ibc-edit-extra" data-ibc-edit-extra hidden></div>
 				<div class="ibc-modal-feedback" hidden></div>
 			</div>

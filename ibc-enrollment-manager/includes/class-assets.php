@@ -127,6 +127,9 @@ class Assets {
 						'nonJson'      => esc_html__( 'Réponse invalide du serveur.', 'ibc-enrollment-manager' ),
 						'extraTitle'   => esc_html__( 'Informations complémentaires', 'ibc-enrollment-manager' ),
 						'download'     => esc_html__( 'Télécharger', 'ibc-enrollment-manager' ),
+						'docRecto'     => esc_html__( 'Recto', 'ibc-enrollment-manager' ),
+						'docVerso'     => esc_html__( 'Verso', 'ibc-enrollment-manager' ),
+						'docMissing'   => esc_html__( 'Aucun fichier', 'ibc-enrollment-manager' ),
 					),
 				)
 			);
