@@ -227,72 +227,103 @@ class Shortcodes {
 		ob_start();
 		?>
 		<div class="ibc-dashboard" data-ibc-dashboard>
-			<div class="ibc-dashboard-header">
-				<h2><?php esc_html_e( 'Gestion des préinscriptions IBC', 'ibc-enrollment-manager' ); ?></h2>
-				<button type="button" class="ibc-button-primary" data-ibc-export><?php esc_html_e( 'Exporter CSV', 'ibc-enrollment-manager' ); ?></button>
-			</div>
+			<header class="ibc-dashboard__hero">
+				<div class="ibc-dashboard__hero-text">
+					<h1 class="ibc-dashboard__title"><?php esc_html_e( 'IBC – Dashboard Admin Préparation D\'examen', 'ibc-enrollment-manager' ); ?></h1>
+					<p class="ibc-dashboard__subtitle"><?php esc_html_e( 'Gérez les inscriptions avec édition rapide, recherche, filtrage et export CSV.', 'ibc-enrollment-manager' ); ?></p>
+				</div>
+				<div class="ibc-dashboard__hero-actions">
+					<button type="button" class="ibc-button-secondary" data-ibc-logout><?php esc_html_e( 'Déconnexion', 'ibc-enrollment-manager' ); ?></button>
+				</div>
+			</header>
 
-			<div class="ibc-dashboard-toolbar">
-				<div class="ibc-field">
-					<label for="ibc_filter_search"><?php esc_html_e( 'Recherche', 'ibc-enrollment-manager' ); ?></label>
-					<input type="search" id="ibc_filter_search" placeholder="<?php esc_attr_e( 'Nom, email, téléphone, référence…', 'ibc-enrollment-manager' ); ?>">
+			<section class="ibc-dashboard__filters">
+				<div class="ibc-dashboard__filters-grid">
+					<div class="ibc-field">
+						<label for="ibc_filter_level"><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></label>
+						<select id="ibc_filter_level">
+							<option value=""><?php esc_html_e( 'Tous', 'ibc-enrollment-manager' ); ?></option>
+							<option value="A1">A1</option>
+							<option value="A2">A2</option>
+							<option value="B1">B1</option>
+							<option value="B2">B2</option>
+							<option value="C1">C1</option>
+							<option value="C2">C2</option>
+						</select>
+					</div>
+					<div class="ibc-field">
+						<label for="ibc_filter_status"><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></label>
+						<select id="ibc_filter_status">
+							<option value=""><?php esc_html_e( 'Tous', 'ibc-enrollment-manager' ); ?></option>
+							<option value="Confirme"><?php esc_html_e( 'Confirmées', 'ibc-enrollment-manager' ); ?></option>
+							<option value="Annule"><?php esc_html_e( 'Annulées', 'ibc-enrollment-manager' ); ?></option>
+						</select>
+					</div>
+					<div class="ibc-field ibc-field--search">
+						<label for="ibc_filter_search"><?php esc_html_e( 'Recherche', 'ibc-enrollment-manager' ); ?></label>
+						<div class="ibc-search-control">
+							<input type="search" id="ibc_filter_search" placeholder="<?php esc_attr_e( 'Tapez pour filtrer…', 'ibc-enrollment-manager' ); ?>">
+							<button type="button" class="ibc-button-primary" data-ibc-refresh><?php esc_html_e( 'Actualiser', 'ibc-enrollment-manager' ); ?></button>
+						</div>
+					</div>
 				</div>
-				<div class="ibc-field">
-					<label for="ibc_filter_level"><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></label>
-					<select id="ibc_filter_level">
-						<option value=""><?php esc_html_e( 'Tous', 'ibc-enrollment-manager' ); ?></option>
-						<option value="A1">A1</option>
-						<option value="A2">A2</option>
-						<option value="B1">B1</option>
-						<option value="B2">B2</option>
-						<option value="C1">C1</option>
-						<option value="C2">C2</option>
-					</select>
+				<div class="ibc-dashboard__filters-actions">
+					<button type="button" class="ibc-button-outline" data-ibc-export><?php esc_html_e( 'Exporter CSV', 'ibc-enrollment-manager' ); ?></button>
+					<button type="button" class="ibc-button-ghost" data-ibc-reset><?php esc_html_e( 'Réinitialiser', 'ibc-enrollment-manager' ); ?></button>
 				</div>
-				<div class="ibc-field">
-					<label for="ibc_filter_status"><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></label>
-					<select id="ibc_filter_status">
-						<option value=""><?php esc_html_e( 'Tous', 'ibc-enrollment-manager' ); ?></option>
-						<option value="Confirme"><?php esc_html_e( 'Confirmées', 'ibc-enrollment-manager' ); ?></option>
-						<option value="Annule"><?php esc_html_e( 'Annulées', 'ibc-enrollment-manager' ); ?></option>
-					</select>
-				</div>
-				<div class="ibc-field">
-					<label for="ibc_filter_perpage"><?php esc_html_e( 'Par page', 'ibc-enrollment-manager' ); ?></label>
-					<select id="ibc_filter_perpage">
-						<option value="25">25</option>
-						<option value="50" selected>50</option>
-						<option value="100">100</option>
-					</select>
-				</div>
+			</section>
+
+			<div class="ibc-dashboard-status" data-ibc-status>
+				<span class="ibc-dashboard-status__dot"></span>
+				<span data-ibc-status-text><?php esc_html_e( 'Prêt', 'ibc-enrollment-manager' ); ?></span>
 			</div>
 
 			<div class="ibc-table-wrapper">
-				<table class="ibc-table">
-					<thead>
-						<tr>
-							<th><?php esc_html_e( 'Référence', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'Nom complet', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'Coordonnées', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'CIN', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></th>
-							<th><?php esc_html_e( 'Actions', 'ibc-enrollment-manager' ); ?></th>
-						</tr>
-					</thead>
-					<tbody data-ibc-table-body>
-						<tr class="ibc-table-empty">
-							<td colspan="7"><?php esc_html_e( 'Chargement en cours…', 'ibc-enrollment-manager' ); ?></td>
-						</tr>
-					</tbody>
-				</table>
+				<div class="ibc-table-scroller">
+					<table class="ibc-table">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Date d\'inscription', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Prénom', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Nom', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Date de naissance', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Lieu de naissance', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Email', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Téléphone', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'CIN Recto', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'CIN Verso', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Message', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Référence', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></th>
+								<th><?php esc_html_e( 'Éditer', 'ibc-enrollment-manager' ); ?></th>
+							</tr>
+						</thead>
+						<tbody data-ibc-table-body>
+							<tr class="ibc-table-empty">
+								<td colspan="14"><?php esc_html_e( 'Chargement en cours…', 'ibc-enrollment-manager' ); ?></td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
 			</div>
 
-			<div class="ibc-pagination" data-ibc-pagination hidden>
-				<button type="button" class="ibc-button-secondary" data-ibc-prev><?php esc_html_e( 'Précédent', 'ibc-enrollment-manager' ); ?></button>
-				<span data-ibc-page-indicator></span>
-				<button type="button" class="ibc-button-secondary" data-ibc-next><?php esc_html_e( 'Suivant', 'ibc-enrollment-manager' ); ?></button>
-			</div>
+			<footer class="ibc-dashboard-footer">
+				<div class="ibc-dashboard-footer__perpage">
+					<label for="ibc_filter_perpage"><?php esc_html_e( 'Par page', 'ibc-enrollment-manager' ); ?></label>
+					<select id="ibc_filter_perpage">
+						<option value="10" selected>10</option>
+						<option value="25">25</option>
+						<option value="50">50</option>
+						<option value="100">100</option>
+					</select>
+				</div>
+				<div class="ibc-pagination" data-ibc-pagination hidden>
+					<button type="button" class="ibc-button-secondary" data-ibc-prev><?php esc_html_e( 'Précédent', 'ibc-enrollment-manager' ); ?></button>
+					<span data-ibc-page-indicator>Page 1</span>
+					<button type="button" class="ibc-button-secondary" data-ibc-next><?php esc_html_e( 'Suivant', 'ibc-enrollment-manager' ); ?></button>
+				</div>
+			</footer>
 		</div>
 
 		<div class="ibc-modal" data-ibc-login hidden>
