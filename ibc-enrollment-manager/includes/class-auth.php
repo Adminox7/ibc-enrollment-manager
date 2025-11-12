@@ -66,9 +66,14 @@ class Auth {
 			return false;
 		}
 
-		$key = $this->transient_key( $token );
+		$key    = $this->transient_key( $token );
+		$valid  = false !== get_transient( $key );
 
-		return false !== get_transient( $key );
+		if ( ! $valid ) {
+			$this->forget_token( $key );
+		}
+
+		return $valid;
 	}
 
 	/**
@@ -81,7 +86,8 @@ class Auth {
 		$key   = $this->transient_key( $token );
 
 		set_transient( $key, 1, self::TOKEN_TTL );
-		update_option( 'ibc_last_token_issued', ibc_now() );
+		$this->remember_token( $key );
+		update_option( 'ibc_last_token_issued', $token );
 
 		return array(
 			'success' => true,
@@ -99,5 +105,46 @@ class Auth {
 	 */
 	private function transient_key( string $token ): string {
 		return 'ibc_tok_' . hash( 'sha256', $token );
+	}
+
+	/**
+	 * Track active token hash.
+	 *
+	 * @param string $hash Hashed key.
+	 *
+	 * @return void
+	 */
+	private function remember_token( string $hash ): void {
+		$tokens = get_option( 'ibc_active_tokens', array() );
+		if ( ! is_array( $tokens ) ) {
+			$tokens = array();
+		}
+
+		foreach ( $tokens as $stored_hash => $timestamp ) {
+			if ( false === get_transient( $stored_hash ) ) {
+				unset( $tokens[ $stored_hash ] );
+			}
+		}
+
+		$tokens[ $hash ] = time();
+
+		update_option( 'ibc_active_tokens', $tokens );
+	}
+
+	/**
+	 * Remove token hash from registry.
+	 *
+	 * @param string $hash Token hash.
+	 *
+	 * @return void
+	 */
+	private function forget_token( string $hash ): void {
+		$tokens = get_option( 'ibc_active_tokens', array() );
+		if ( ! is_array( $tokens ) || ! isset( $tokens[ $hash ] ) ) {
+			return;
+		}
+
+		unset( $tokens[ $hash ] );
+		update_option( 'ibc_active_tokens', $tokens );
 	}
 }

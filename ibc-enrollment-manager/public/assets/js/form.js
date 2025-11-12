@@ -12,9 +12,16 @@
 	const successPopup = root.querySelector('[data-ibc-success]');
 	const closedPopup = root.querySelector('[data-ibc-closed]');
 	const closeButtons = root.querySelectorAll('[data-ibc-close]');
+	const schema = Array.isArray(IBCForm.fields) ? IBCForm.fields : [];
+
+	const findFieldElement = (fieldId) => root.querySelector(`[data-ibc-field-id="${fieldId}"]`);
+
+	const emailField = schema.find((field) => field.map === 'email' || field.id === 'email');
+	const phoneField = schema.find((field) => field.map === 'phone' || field.id === 'phone');
+
 	const inputs = {
-		email: form.querySelector('#ibc_email'),
-		phone: form.querySelector('#ibc_phone'),
+		email: emailField ? findFieldElement(emailField.id)?.querySelector('input, select, textarea') : null,
+		phone: phoneField ? findFieldElement(phoneField.id)?.querySelector('input, select, textarea') : null,
 	};
 
 	let debounceTimer;
@@ -51,9 +58,17 @@
 		});
 	});
 
+	const ensureJson = async (response) => {
+		const contentType = (response.headers.get('content-type') || '').toLowerCase();
+		if (!contentType.includes('application/json')) {
+			throw new Error(IBCForm.messages.nonJson || 'Non-JSON response received.');
+		}
+		return response.json();
+	};
+
 	const checkCapacity = () => {
-		const email = inputs.email.value.trim();
-		const phone = inputs.phone.value.trim();
+		const email = inputs.email ? inputs.email.value.trim() : '';
+		const phone = inputs.phone ? inputs.phone.value.trim() : '';
 
 		if (!email && !phone) {
 			return;
@@ -74,7 +89,7 @@
 				method: 'GET',
 				credentials: 'same-origin',
 			})
-				.then((response) => response.json())
+				.then(ensureJson)
 				.then((result) => {
 					if (!result.success) {
 						return;
@@ -115,6 +130,10 @@
 		return data;
 	};
 
+	const resetCheckState = () => {
+		lastCheck = {};
+	};
+
 	form.addEventListener('submit', (event) => {
 		event.preventDefault();
 		clearFeedback();
@@ -141,15 +160,15 @@
 			credentials: 'same-origin',
 			body: formData,
 		})
-			.then(async (response) => {
-				const payload = await response.json();
+			.then(ensureJson)
+			.then((payload) => {
 				if (!payload.success) {
 					const message = payload.message || IBCForm.messages.error;
 					throw new Error(message);
 				}
 
 				form.reset();
-				lastCheck = {};
+				resetCheckState();
 				togglePopup(successPopup, true);
 			})
 			.catch((error) => {

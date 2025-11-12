@@ -36,6 +36,7 @@ class Email {
 		$from_mail = (string) get_option( 'ibc_contact_email', '' );
 		if ( is_email( $from_mail ) ) {
 			$headers[] = 'From: IBC Morocco <' . $from_mail . '>';
+			$headers[] = 'Reply-To: IBC Morocco <' . $from_mail . '>';
 		}
 
 		$html = $this->build_email_html( $context );
@@ -51,25 +52,17 @@ class Email {
 	 * @return string
 	 */
 	private function build_email_html( array $context ): string {
-		$colors = get_option(
-			'ibc_brand_colors',
-			array(
-				'primary'   => '#e94162',
-				'secondary' => '#0f172a',
-				'text'      => '#1f2937',
-				'muted'     => '#f8fafc',
-				'border'    => '#e2e8f0',
-			)
-		);
+		$colors = ibc_get_brand_colors_with_legacy();
 
-		$bank = array(
-			'bankName'      => (string) get_option( 'ibc_brand_bankName', '' ),
-			'accountHolder' => (string) get_option( 'ibc_brand_accountHolder', '' ),
-			'rib'           => (string) get_option( 'ibc_brand_rib', '' ),
-			'iban'          => (string) get_option( 'ibc_brand_iban', '' ),
-			'bic'           => (string) get_option( 'ibc_brand_bic', '' ),
-			'agency'        => (string) get_option( 'ibc_brand_agency', '' ),
-			'paymentNote'   => (string) get_option( 'ibc_brand_paymentNote', '' ),
+		$details = ibc_get_payment_details();
+		$bank    = array(
+			'bankName'      => $details['bank_name'] ?? '',
+			'accountHolder' => $details['account_holder'] ?? '',
+			'rib'           => $details['rib'] ?? '',
+			'iban'          => $details['iban'] ?? '',
+			'bic'           => $details['bic'] ?? '',
+			'agency'        => $details['agency'] ?? '',
+			'paymentNote'   => $details['payment_note'] ?? '',
 		);
 
 		$contact = array(
@@ -102,6 +95,34 @@ class Email {
 		$body .= '<li><strong>' . \esc_html__( 'Email', 'ibc-enrollment-manager' ) . ':</strong> ' . esc_html( $context['email'] ?? '' ) . '</li>';
 		$body .= '<li><strong>' . \esc_html__( 'Téléphone', 'ibc-enrollment-manager' ) . ':</strong> ' . esc_html( $context['phone'] ?? '' ) . '</li>';
 		$body .= '</ul>';
+
+		if ( ! empty( $context['notes'] ) ) {
+			$body .= '<p style="margin:16px 0;"><strong>' . \esc_html__( 'Message du candidat', 'ibc-enrollment-manager' ) . ':</strong><br>' . nl2br( esc_html( $context['notes'] ) ) . '</p>';
+		}
+
+		if ( ! empty( $context['extra'] ) && is_array( $context['extra'] ) ) {
+			$body .= '<div style="border:1px solid ' . esc_attr( $colors['border'] ) . ';padding:16px;border-radius:8px;margin:24px 0;">';
+			$body .= '<strong>' . \esc_html__( 'Informations complémentaires', 'ibc-enrollment-manager' ) . '</strong>';
+			$body .= '<ul style="margin:12px 0;padding-left:18px;">';
+			foreach ( $context['extra'] as $entry ) {
+				if ( empty( $entry['value'] ) ) {
+					continue;
+				}
+				$label = esc_html( $entry['label'] ?? $entry['id'] ?? '' );
+				$value = $entry['value'];
+
+				if ( ( $entry['type'] ?? '' ) === 'file' && filter_var( $value, FILTER_VALIDATE_URL ) ) {
+					$display = '<a href="' . esc_url( $value ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Télécharger', 'ibc-enrollment-manager' ) . '</a>';
+				} else {
+					$display = esc_html( (string) ( $entry['display'] ?? $value ) );
+				}
+
+				$body .= '<li><strong>' . $label . ':</strong> ' . $display . '</li>';
+			}
+			$body .= '</ul>';
+			$body .= '</div>';
+		}
+
 		$body .= '<p style="margin:16px 0;"><strong>' . \esc_html__( 'Montant à régler', 'ibc-enrollment-manager' ) . ':</strong> ' . esc_html( $context['price'] ?? '' ) . '</p>';
 		$body .= '<p style="margin:16px 0;"><strong>' . \esc_html__( 'Échéance de paiement', 'ibc-enrollment-manager' ) . ':</strong> ' . esc_html( $deadline ) . '</p>';
 		$body .= '<div style="border:1px dashed ' . esc_attr( $colors['border'] ) . ';padding:16px;border-radius:8px;margin:24px 0;background:' . esc_attr( $colors['muted'] ) . ';">';

@@ -212,6 +212,26 @@
 	font-weight: 500;
 }
 
+.ibc-edit-extra {
+	margin-top: 1rem;
+	padding: 1rem 1.2rem;
+	border-radius: 10px;
+	border: 1px solid rgba(15, 23, 42, 0.12);
+	background: rgba(248, 250, 252, 0.9);
+}
+
+.ibc-edit-extra h4 {
+	margin: 0 0 0.75rem 0;
+	font-size: 1rem;
+	color: #0f172a;
+}
+
+.ibc-edit-extra ul {
+	margin: 0;
+	padding-left: 1.1rem;
+	color: #334155;
+}
+
 /* Settings page */
 .ibc-settings-page .nav-tab-wrapper {
 	margin-top: 1.5rem;
@@ -244,9 +264,311 @@
 	max-width: 560px;
 }
 
+.ibc-admin-section {
+	margin: 1.5rem 0 1rem;
+}
+
+.ibc-admin-section__title {
+	margin: 0;
+	font-size: 1.25rem;
+	color: #0f172a;
+}
+
+.ibc-admin-section__description {
+	margin: 0.35rem 0 0 0;
+	color: #475569;
+}
+
+.ibc-admin-definition {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.5rem 1.5rem;
+	margin: 1rem 0;
+}
+
+.ibc-admin-definition dt {
+	font-weight: 600;
+	color: #0f172a;
+}
+
+.ibc-admin-definition dd {
+	margin: 0;
+	color: #475569;
+}
+
+.ibc-reset-tokens-form {
+	margin-top: 1rem;
+}
+
+.ibc-builder {
+	margin: 2rem 0;
+}
+
+.ibc-builder__columns {
+	display: grid;
+	grid-template-columns: minmax(240px, 1fr) minmax(260px, 1fr) minmax(340px, 1.2fr);
+	gap: 1.5rem;
+}
+
+.ibc-builder__panel {
+	background: #ffffff;
+	border-radius: 16px;
+	border: 1px solid rgba(15, 23, 42, 0.08);
+	box-shadow: 0 18px 50px -35px rgba(15, 23, 42, 0.45);
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+.ibc-builder__panel-header {
+	padding: 1.2rem 1.4rem;
+	border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+}
+
+.ibc-builder__panel-header h3 {
+	margin: 0;
+	font-size: 1.05rem;
+	color: #0f172a;
+}
+
+.ibc-builder__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 520px;
+	overflow-y: auto;
+}
+
+.ibc-builder__list-item {
+	padding: 1rem 1.4rem;
+	border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+	cursor: pointer;
+	background: #ffffff;
+	transition: background 0.2s ease, transform 0.2s ease;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 0.5rem;
+}
+
+.ibc-builder__list-item:last-child {
+	border-bottom: none;
+}
+
+.ibc-builder__list-item:hover {
+	background: rgba(233, 65, 98, 0.06);
+}
+
+.ibc-builder__list-item.is-active {
+	background: rgba(233, 65, 98, 0.12);
+}
+
+.ibc-builder__list-item.is-muted {
+	opacity: 0.65;
+}
+
+.ibc-builder__list-item.is-dragging {
+	opacity: 0.4;
+}
+
+.ibc-builder__list-item.is-drag-over {
+	box-shadow: inset 0 0 0 2px rgba(233, 65, 98, 0.45);
+}
+
+.ibc-builder__list-label {
+	font-weight: 600;
+	color: #0f172a;
+}
+
+.ibc-builder__list-meta {
+	grid-column: 1 / -1;
+	font-size: 0.85rem;
+	color: #64748b;
+}
+
+.ibc-builder__list-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.button.button-small {
+	padding: 0.35rem 0.9rem;
+	font-size: 0.85rem;
+	line-height: 1.2;
+}
+
+.button.button-link-delete {
+	background: none;
+	border: none;
+	color: #ef4444;
+	box-shadow: none;
+}
+
+.ibc-builder-editor-form {
+	padding: 1.4rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	overflow-y: auto;
+}
+
+.ibc-builder-editor-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.ibc-builder-editor-field span {
+	font-weight: 600;
+	color: #334155;
+}
+
+.ibc-builder-editor-field input,
+.ibc-builder-editor-field select,
+.ibc-builder-editor-field textarea {
+	padding: 0.65rem 0.8rem;
+	border-radius: 10px;
+	border: 1px solid #cbd5f5;
+	font-size: 0.95rem;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ibc-builder-editor-field input:focus,
+.ibc-builder-editor-field select:focus,
+.ibc-builder-editor-field textarea:focus {
+	outline: none;
+	border-color: #6366f1;
+	box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.16);
+}
+
+.ibc-builder-editor-inline {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-weight: 600;
+	color: #334155;
+}
+
+.ibc-builder__placeholder {
+	padding: 2rem;
+	text-align: center;
+	color: #64748b;
+	margin: 0;
+}
+
+.ibc-builder__preview {
+	padding: 1.5rem;
+	background: rgba(248, 250, 252, 0.9);
+	min-height: 100%;
+}
+
+.ibc-preview-form {
+	display: flex;
+	flex-direction: column;
+	gap: 1.4rem;
+	padding: 1.4rem;
+	background: #ffffff;
+	border-radius: 16px;
+	border: 1px solid var(--ibc-preview-border, #e2e8f0);
+	box-shadow: 0 18px 40px -35px rgba(15, 23, 42, 0.45);
+}
+
+.ibc-preview-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1.25rem;
+}
+
+.ibc-preview-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.45rem;
+}
+
+.ibc-preview-field.is-half {
+	grid-column: span 1;
+}
+
+.ibc-preview-field:not(.is-half) {
+	grid-column: span 2;
+}
+
+.ibc-preview-field label {
+	font-weight: 600;
+	color: #0f172a;
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.ibc-preview-field input,
+.ibc-preview-field select,
+.ibc-preview-field textarea {
+	padding: 0.65rem 0.85rem;
+	border-radius: 10px;
+	border: 1px solid #cbd5f5;
+	background: #f8fafc;
+}
+
+.ibc-preview-required {
+	color: #ef4444;
+}
+
+.ibc-preview-help {
+	margin: 0;
+	font-size: 0.85rem;
+	color: #64748b;
+}
+
+.ibc-preview-form .button-primary {
+	align-self: flex-end;
+	background: var(--ibc-preview-button-bg, #e94162);
+	color: var(--ibc-preview-button-text, #ffffff);
+	border: none;
+	border-radius: 999px;
+	padding: 0.65rem 1.8rem;
+	box-shadow: 0 16px 24px -18px rgba(233, 65, 98, 0.6);
+}
+
+.ibc-builder-theme {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 1rem;
+	background: #ffffff;
+	border-radius: 16px;
+	padding: 1.2rem 1.4rem;
+	border: 1px solid rgba(15, 23, 42, 0.07);
+	box-shadow: 0 14px 35px -30px rgba(15, 23, 42, 0.4);
+	margin: 1.5rem 0 0;
+}
+
+.ibc-builder-theme label {
+	display: block;
+	font-weight: 600;
+	color: #334155;
+	margin-bottom: 0.35rem;
+}
+
+.ibc-builder-theme input[type="color"] {
+	width: 100%;
+	height: 40px;
+	border: 1px solid #cbd5f5;
+	border-radius: 8px;
+	padding: 0;
+}
+
 @media (max-width: 960px) {
 	.ibc-dashboard-toolbar {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.ibc-builder__columns {
+		grid-template-columns: 1fr;
 	}
 }
 
@@ -263,5 +585,9 @@
 	.ibc-dashboard-header {
 		flex-direction: column;
 		align-items: flex-start;
+	}
+
+	.ibc-admin-definition {
+		grid-template-columns: 1fr;
 	}
 }

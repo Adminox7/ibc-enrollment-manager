@@ -7,6 +7,8 @@
 
 namespace IBC;
 
+use IBC\FormBuilder;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -31,14 +33,23 @@ class Shortcodes {
 	private Auth $auth;
 
 	/**
+	 * Form builder service.
+	 *
+	 * @var FormBuilder
+	 */
+	private FormBuilder $form_builder;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Registrations $registrations Registrations service.
 	 * @param Auth          $auth          Auth service.
+	 * @param FormBuilder   $form_builder  Form builder service.
 	 */
-	public function __construct( Registrations $registrations, Auth $auth ) {
+	public function __construct( Registrations $registrations, Auth $auth, FormBuilder $form_builder ) {
 		$this->registrations = $registrations;
 		$this->auth          = $auth;
+		$this->form_builder  = $form_builder;
 	}
 
 	/**
@@ -59,6 +70,9 @@ class Shortcodes {
 	 * @return string
 	 */
 	public function render_register( array $atts ): string {
+		$schema  = $this->form_builder->get_active_schema();
+		$schema  = ! empty( $schema ) ? $schema : $this->form_builder->get_default_schema();
+		$colors  = ibc_get_brand_colors_with_legacy();
 		$atts = shortcode_atts(
 			array(
 				'title' => __( 'Préinscription IBC', 'ibc-enrollment-manager' ),
@@ -66,74 +80,33 @@ class Shortcodes {
 			$atts
 		);
 
+		$style = sprintf(
+			'--ibc-form-primary:%1$s;--ibc-form-secondary:%2$s;--ibc-form-text:%3$s;--ibc-form-muted:%4$s;--ibc-form-border:%5$s;--ibc-form-button:%6$s;--ibc-form-button-text:%7$s;--ibc-form-success-bg:%8$s;--ibc-form-success-text:%9$s;--ibc-form-error-bg:%10$s;--ibc-form-error-text:%11$s;',
+			esc_attr( $colors['primary'] ),
+			esc_attr( $colors['secondary'] ),
+			esc_attr( $colors['text'] ),
+			esc_attr( $colors['muted'] ),
+			esc_attr( $colors['border'] ),
+			esc_attr( $colors['button'] ),
+			esc_attr( $colors['button_text'] ),
+			esc_attr( $colors['success_bg'] ),
+			esc_attr( $colors['success_text'] ),
+			esc_attr( $colors['error_bg'] ),
+			esc_attr( $colors['error_text'] )
+		);
+
 		ob_start();
 		?>
-		<div class="ibc-form-wrapper" data-ibc-form>
+		<div class="ibc-form-wrapper" data-ibc-form style="<?php echo esc_attr( $style ); ?>">
 			<div class="ibc-form-card">
 				<h2 class="ibc-form-title"><?php echo esc_html( $atts['title'] ); ?></h2>
 				<p class="ibc-form-subtitle"><?php esc_html_e( 'Complétez le formulaire pour réserver votre place.', 'ibc-enrollment-manager' ); ?></p>
 
 				<form class="ibc-form" enctype="multipart/form-data">
-					<div class="ibc-form-columns">
-						<div class="ibc-form-group">
-							<label for="ibc_prenom"><?php esc_html_e( 'Prénom', 'ibc-enrollment-manager' ); ?> *</label>
-							<input type="text" id="ibc_prenom" name="prenom" required>
-						</div>
-						<div class="ibc-form-group">
-							<label for="ibc_nom"><?php esc_html_e( 'Nom', 'ibc-enrollment-manager' ); ?> *</label>
-							<input type="text" id="ibc_nom" name="nom" required>
-						</div>
-					</div>
-
-					<div class="ibc-form-columns">
-						<div class="ibc-form-group">
-							<label for="ibc_email"><?php esc_html_e( 'Email', 'ibc-enrollment-manager' ); ?> *</label>
-							<input type="email" id="ibc_email" name="email" required>
-						</div>
-						<div class="ibc-form-group">
-							<label for="ibc_phone"><?php esc_html_e( 'Téléphone', 'ibc-enrollment-manager' ); ?> *</label>
-							<input type="tel" id="ibc_phone" name="phone" required>
-						</div>
-					</div>
-
-					<div class="ibc-form-columns">
-						<div class="ibc-form-group">
-							<label for="ibc_birth_date"><?php esc_html_e( 'Date de naissance', 'ibc-enrollment-manager' ); ?></label>
-							<input type="date" id="ibc_birth_date" name="birth_date">
-						</div>
-						<div class="ibc-form-group">
-							<label for="ibc_birth_place"><?php esc_html_e( 'Lieu de naissance', 'ibc-enrollment-manager' ); ?></label>
-							<input type="text" id="ibc_birth_place" name="birth_place">
-						</div>
-					</div>
-
-					<div class="ibc-form-group">
-						<label for="ibc_level"><?php esc_html_e( 'Niveau souhaité', 'ibc-enrollment-manager' ); ?> *</label>
-						<select id="ibc_level" name="niveau" required>
-							<option value=""><?php esc_html_e( 'Choisir…', 'ibc-enrollment-manager' ); ?></option>
-							<option value="A1">A1</option>
-							<option value="A2">A2</option>
-							<option value="B1">B1</option>
-							<option value="B2">B2</option>
-							<option value="C1">C1</option>
-							<option value="C2">C2</option>
-						</select>
-					</div>
-
-					<div class="ibc-form-group">
-						<label for="ibc_message"><?php esc_html_e( 'Message', 'ibc-enrollment-manager' ); ?></label>
-						<textarea id="ibc_message" name="message" rows="4" placeholder="<?php esc_attr_e( 'Précisions éventuelles…', 'ibc-enrollment-manager' ); ?>"></textarea>
-					</div>
-
-					<div class="ibc-form-columns">
-						<div class="ibc-form-group">
-							<label for="ibc_cin_recto"><?php esc_html_e( 'CIN / Passeport (recto)', 'ibc-enrollment-manager' ); ?></label>
-							<input type="file" id="ibc_cin_recto" name="cin_recto" accept=".jpg,.jpeg,.png,.pdf">
-						</div>
-						<div class="ibc-form-group">
-							<label for="ibc_cin_verso"><?php esc_html_e( 'CIN / Passeport (verso)', 'ibc-enrollment-manager' ); ?></label>
-							<input type="file" id="ibc_cin_verso" name="cin_verso" accept=".jpg,.jpeg,.png,.pdf">
-						</div>
+					<div class="ibc-form-grid">
+						<?php foreach ( $schema as $field ) : ?>
+							<?php echo $this->render_form_field( $field ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php endforeach; ?>
 					</div>
 
 					<div class="ibc-form-actions">
@@ -159,6 +132,86 @@ class Shortcodes {
 					<button type="button" class="ibc-button-secondary" data-ibc-close><?php esc_html_e( 'Fermer', 'ibc-enrollment-manager' ); ?></button>
 				</div>
 			</div>
+		</div>
+		<?php
+
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Render a single form field.
+	 *
+	 * @param array $field Field definition.
+	 *
+	 * @return string
+	 */
+	private function render_form_field( array $field ): string {
+		$id          = 'ibc_field_' . sanitize_html_class( $field['id'] );
+		$name        = sanitize_key( $field['id'] );
+		$type        = in_array( $field['type'], array( 'text', 'email', 'tel', 'date', 'textarea', 'select', 'file' ), true ) ? $field['type'] : 'text';
+		$required    = ! empty( $field['required'] );
+		$width       = 'half' === ( $field['width'] ?? 'full' ) ? 'is-half' : 'is-full';
+		$placeholder = $field['placeholder'] ?? '';
+		$help        = $field['help'] ?? '';
+		$map         = sanitize_key( $field['map'] ?? '' );
+		$default     = $field['default'] ?? '';
+		$help_id     = $help ? $id . '_help' : '';
+		$describedby = $help_id ? ' aria-describedby="' . esc_attr( $help_id ) . '"' : '';
+
+		ob_start();
+		?>
+		<div class="ibc-form-field <?php echo esc_attr( $width ); ?>" data-ibc-field-id="<?php echo esc_attr( $name ); ?>" data-ibc-field-type="<?php echo esc_attr( $type ); ?>"<?php echo $map ? ' data-ibc-field-map="' . esc_attr( $map ) . '"' : ''; ?> data-ibc-field-required="<?php echo $required ? '1' : '0'; ?>">
+			<label for="<?php echo esc_attr( $id ); ?>">
+				<?php echo esc_html( $field['label'] ?? ucfirst( $name ) ); ?>
+				<?php if ( $required ) : ?>
+					<span class="ibc-form-required">*</span>
+				<?php endif; ?>
+			</label>
+			<?php
+			switch ( $type ) {
+				case 'textarea':
+					?>
+					<textarea id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>" rows="4" <?php echo $required ? 'required' : ''; ?><?php echo $describedby; ?> placeholder="<?php echo esc_attr( $placeholder ); ?>"><?php echo esc_textarea( $default ); ?></textarea>
+					<?php
+					break;
+				case 'select':
+					?>
+					<select id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>"<?php echo $required ? ' required' : ''; ?><?php echo $describedby; ?>>
+						<option value=""><?php echo esc_html( $placeholder ?: __( 'Sélectionnez…', 'ibc-enrollment-manager' ) ); ?></option>
+						<?php
+						foreach ( (array) ( $field['choices'] ?? array() ) as $choice ) :
+							$value = isset( $choice['value'] ) ? (string) $choice['value'] : '';
+							$label = isset( $choice['label'] ) ? (string) $choice['label'] : $value;
+							?>
+							<option value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<?php
+					break;
+				case 'file':
+					?>
+					<input type="file" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>"<?php echo $required ? ' required' : ''; ?><?php echo ! empty( $field['accept'] ) ? ' accept="' . esc_attr( $field['accept'] ) . '"' : ''; ?><?php echo $describedby; ?>>
+					<?php
+					break;
+				default:
+					?>
+					<input
+						type="<?php echo esc_attr( $type === 'email' ? 'email' : ( $type === 'tel' ? 'tel' : ( $type === 'date' ? 'date' : 'text' ) ) ); ?>"
+						id="<?php echo esc_attr( $id ); ?>"
+						name="<?php echo esc_attr( $name ); ?>"
+						<?php echo $required ? 'required' : ''; ?>
+						placeholder="<?php echo esc_attr( $placeholder ); ?>"
+						value="<?php echo esc_attr( $default ); ?>"
+						<?php echo $describedby; ?>
+					>
+					<?php
+					break;
+			}
+
+			if ( $help ) :
+				?>
+				<p class="ibc-form-help" id="<?php echo esc_attr( $help_id ); ?>"><?php echo esc_html( $help ); ?></p>
+			<?php endif; ?>
 		</div>
 		<?php
 
@@ -295,6 +348,7 @@ class Shortcodes {
 					</div>
 					<input type="hidden" name="id" value="">
 				</form>
+				<div class="ibc-edit-extra" data-ibc-edit-extra hidden></div>
 				<div class="ibc-modal-feedback" hidden></div>
 			</div>
 		</div>
