@@ -96,14 +96,14 @@ class Assets {
 		if ( ibc_has_shortcode( 'ibc_admin_dashboard', $post ) ) {
 			wp_enqueue_style(
 				'ibc-admin-dashboard',
-				IBC_ENROLLMENT_URL . 'admin/assets/css/admin.css',
+				IBC_ENROLLMENT_URL . 'admin/assets/css/ibc-admin.css',
 				array(),
 				IBC_ENROLLMENT_VERSION
 			);
 
 			wp_enqueue_script(
 				'ibc-admin-dashboard',
-				IBC_ENROLLMENT_URL . 'admin/assets/js/admin.js',
+				IBC_ENROLLMENT_URL . 'admin/assets/js/ibc-admin.js',
 				array( 'jquery' ),
 				IBC_ENROLLMENT_VERSION,
 				true
@@ -169,7 +169,7 @@ class Assets {
 
 		wp_enqueue_style(
 			'ibc-admin-settings',
-			IBC_ENROLLMENT_URL . 'admin/assets/css/admin.css',
+			IBC_ENROLLMENT_URL . 'admin/assets/css/ibc-admin.css',
 			array(),
 			IBC_ENROLLMENT_VERSION
 		);
