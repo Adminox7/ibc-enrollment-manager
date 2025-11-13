@@ -117,17 +117,21 @@ class Shortcodes {
 				</form>
 			</div>
 
-			<div class="ibc-popup" data-ibc-success hidden>
-				<div class="ibc-popup-card">
-					<h3><?php esc_html_e( 'Merci !', 'ibc-enrollment-manager' ); ?></h3>
-					<p><?php esc_html_e( 'Votre préinscription a été enregistrée. Vérifiez votre boîte mail pour la suite.', 'ibc-enrollment-manager' ); ?></p>
-					<button type="button" class="ibc-button-secondary" data-ibc-close><?php esc_html_e( 'Fermer', 'ibc-enrollment-manager' ); ?></button>
+			<div class="ibc-popup" data-ibc-success hidden role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="ibc-success-title" aria-describedby="ibc-success-description" tabindex="-1">
+				<div class="ibc-popup-card ibc-popup-card--success">
+					<div class="ibc-popup-icon" aria-hidden="true">✅</div>
+					<h3 id="ibc-success-title"><?php esc_html_e( 'Inscription réussie.', 'ibc-enrollment-manager' ); ?></h3>
+					<p id="ibc-success-description" data-ibc-success-text><?php esc_html_e( 'Votre préinscription est enregistrée. Vous pouvez télécharger votre reçu.', 'ibc-enrollment-manager' ); ?></p>
+					<div class="ibc-popup-actions">
+						<a href="#" class="ibc-button-primary" data-ibc-download download><?php esc_html_e( 'Télécharger le reçu', 'ibc-enrollment-manager' ); ?></a>
+						<button type="button" class="ibc-button-secondary" data-ibc-close><?php esc_html_e( 'Fermer', 'ibc-enrollment-manager' ); ?></button>
+					</div>
 				</div>
 			</div>
 
-			<div class="ibc-popup" data-ibc-closed hidden>
+			<div class="ibc-popup" data-ibc-closed hidden role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="ibc-closed-title" tabindex="-1">
 				<div class="ibc-popup-card">
-					<h3><?php esc_html_e( 'Capacité atteinte', 'ibc-enrollment-manager' ); ?></h3>
+					<h3 id="ibc-closed-title"><?php esc_html_e( 'Capacité atteinte', 'ibc-enrollment-manager' ); ?></h3>
 					<p><?php esc_html_e( 'Cette session est complète pour le moment. Contactez-nous pour être alerté en cas de disponibilité.', 'ibc-enrollment-manager' ); ?></p>
 					<button type="button" class="ibc-button-secondary" data-ibc-close><?php esc_html_e( 'Fermer', 'ibc-enrollment-manager' ); ?></button>
 				</div>
@@ -236,7 +240,7 @@ class Shortcodes {
 			</header>
 
 			<section class="ibc-card ibc-filters">
-				<div class="ibc-grid">
+				<div class="ibc-filters-grid">
 					<div class="ibc-field">
 						<label for="ibc_filter_level"><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></label>
 						<select id="ibc_filter_level" class="ibc-select">
@@ -257,24 +261,27 @@ class Shortcodes {
 							<option value="Annule"><?php esc_html_e( 'Annulées', 'ibc-enrollment-manager' ); ?></option>
 						</select>
 					</div>
-					<div class="ibc-field ibc-field-grow">
+					<div class="ibc-field ibc-field--search">
 						<label for="ibc_filter_search"><?php esc_html_e( 'Recherche (prénom, nom, email, téléphone, référence, message)', 'ibc-enrollment-manager' ); ?></label>
-						<input type="search" class="ibc-input" id="ibc_filter_search" placeholder="<?php esc_attr_e( 'Tapez pour filtrer…', 'ibc-enrollment-manager' ); ?>">
+						<div class="ibc-input-wrapper">
+							<span class="ibc-input-icon" aria-hidden="true">🔍</span>
+							<input type="search" class="ibc-input" id="ibc_filter_search" placeholder="<?php esc_attr_e( 'Tapez pour filtrer…', 'ibc-enrollment-manager' ); ?>">
+						</div>
 					</div>
 					<div class="ibc-actions">
 						<button type="button" class="ibc-btn ibc-btn-primary" id="ibc-refresh" data-ibc-refresh><?php esc_html_e( 'Actualiser', 'ibc-enrollment-manager' ); ?></button>
 						<button type="button" class="ibc-btn ibc-btn-outline" id="ibc-export" data-ibc-export><?php esc_html_e( 'Exporter CSV', 'ibc-enrollment-manager' ); ?></button>
-						<button type="button" class="ibc-btn ibc-btn-light" id="ibc-reset" data-ibc-reset><?php esc_html_e( 'Réinitialiser', 'ibc-enrollment-manager' ); ?></button>
+						<button type="button" class="ibc-btn ibc-btn-ghost" id="ibc-reset" data-ibc-reset><?php esc_html_e( 'Réinitialiser', 'ibc-enrollment-manager' ); ?></button>
 					</div>
 				</div>
 			</section>
 
 			<div class="ibc-dashboard-status" data-ibc-status>
-				<span class="ibc-dashboard-status__dot"></span>
+				<span class="ibc-dashboard-status__dot" aria-hidden="true"></span>
 				<span data-ibc-status-text><?php esc_html_e( 'Prêt', 'ibc-enrollment-manager' ); ?></span>
 			</div>
 
-			<section class="ibc-card">
+			<section class="ibc-card ibc-card--table">
 				<div class="ibc-table-wrap">
 					<table class="ibc-table">
 						<thead>

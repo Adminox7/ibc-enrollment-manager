@@ -146,6 +146,10 @@
 	color: var(--ibc-form-success-text, #166534);
 }
 
+.ibc-popup[hidden] {
+	display: none !important;
+}
+
 .ibc-popup {
 	position: fixed;
 	inset: 0;
@@ -154,29 +158,73 @@
 	place-items: center;
 	padding: 1.5rem;
 	z-index: 9999;
+	backdrop-filter: blur(4px);
 }
 
 .ibc-popup-card {
 	max-width: 420px;
 	background: #ffffff;
 	border-radius: 16px;
-	padding: 2.5rem;
+	padding: 2.75rem 2.5rem;
 	text-align: center;
-	box-shadow: 0 30px 70px -40px rgba(15, 23, 42, 0.55);
+	box-shadow: 0 34px 80px -48px rgba(15, 23, 42, 0.6);
 	display: flex;
 	flex-direction: column;
 	gap: 1rem;
 }
 
+.ibc-popup-card--success {
+	border: 1px solid rgba(22, 160, 133, 0.22);
+	box-shadow: 0 40px 90px -50px rgba(22, 160, 133, 0.45);
+}
+
+.ibc-popup-icon {
+	width: 3.2rem;
+	height: 3.2rem;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 auto 0.35rem;
+	font-size: 1.8rem;
+	background: rgba(45, 212, 191, 0.18);
+	color: var(--ibc-form-primary, #e94162);
+}
+
 .ibc-popup-card h3 {
 	margin: 0;
-	font-size: 1.6rem;
+	font-size: 1.75rem;
 	color: var(--ibc-form-secondary, #0f172a);
 }
 
 .ibc-popup-card p {
 	margin: 0;
 	color: rgba(71, 85, 105, 0.95);
+}
+
+.ibc-popup-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	align-items: center;
+	justify-content: center;
+	margin-top: 1rem;
+}
+
+.ibc-popup-actions .ibc-button-primary,
+.ibc-popup-actions .ibc-button-secondary {
+	min-width: 190px;
+	text-decoration: none;
+}
+
+.ibc-popup-actions .ibc-button-primary.is-disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+body.ibc-modal-open {
+	overflow: hidden;
 }
 
 @media (max-width: 768px) {
@@ -194,6 +242,6 @@
 	}
 
 	.ibc-popup-card {
-		padding: 2rem;
+		padding: 2.25rem 1.85rem;
 	}
 }

@@ -204,12 +204,23 @@ class REST {
 
 		return $this->success_response(
 			array(
-				'ref'         => $result['ref'],
-				'receiptUrl'  => $result['downloadUrl'],
-				'receiptId'   => $result['receiptId'],
-				'createdAt'   => $result['createdAt'],
-				'extraFields' => $result['extraFields'] ?? array(),
-				'notes'       => $result['messageNotes'] ?? '',
+				// Backwards compatibility keys.
+				'ref'           => $result['ref'],
+				'receiptUrl'    => $result['downloadUrl'],
+				// Recommended keys.
+				'reference'     => $result['ref'],
+				'receipt_url'   => $result['downloadUrl'],
+				'pdf_available' => isset( $result['pdfAvailable'] ) ? (bool) $result['pdfAvailable'] : ! empty( $result['downloadUrl'] ),
+				'pdfAvailable'  => isset( $result['pdfAvailable'] ) ? (bool) $result['pdfAvailable'] : ! empty( $result['downloadUrl'] ),
+				'receipt_id'    => $result['receiptId'],
+				'receiptId'     => $result['receiptId'],
+				'created_at'    => $result['createdAt'],
+				'extra_fields'  => $result['extraFields'] ?? array(),
+				'notes'         => $result['messageNotes'] ?? '',
+				'messageNotes'  => $result['messageNotes'] ?? '',
+				// Legacy camelCase keys kept intentionally.
+				'createdAt'     => $result['createdAt'],
+				'extraFields'   => $result['extraFields'] ?? array(),
 			),
 			201
 		);
