@@ -2,10 +2,10 @@
 /**
  * REST API endpoints.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 use WP_Error;
 use WP_REST_Request;
@@ -102,7 +102,8 @@ class REST {
 					'prenom' => array( 'required' => true ),
 					'nom'    => array( 'required' => true ),
 					'email'  => array( 'required' => true ),
-					'phone'  => array( 'required' => true ),
+					'telephone' => array( 'required' => false ),
+					'phone'  => array( 'required' => false ),
 					'niveau' => array( 'required' => true ),
 				),
 			)
@@ -170,10 +171,13 @@ class REST {
 	 * @return WP_REST_Response
 	 */
 	public function handle_check( WP_REST_Request $request ): WP_REST_Response {
-		$email = (string) $request->get_param( 'email' );
-		$phone = (string) $request->get_param( 'phone' );
+		$email     = (string) $request->get_param( 'email' );
+		$telephone = (string) $request->get_param( 'telephone' );
+		if ( '' === $telephone ) {
+			$telephone = (string) $request->get_param( 'phone' );
+		}
 
-		$data = $this->registrations->get_capacity_info( $email, $phone );
+		$data = $this->registrations->get_capacity_info( $email, $telephone );
 
 		return $this->success_response( $data );
 	}
@@ -205,22 +209,25 @@ class REST {
 		return $this->success_response(
 			array(
 				// Backwards compatibility keys.
-				'ref'           => $result['ref'],
-				'receiptUrl'    => $result['downloadUrl'],
+				'ref'           => $result['reference'],
+				'receiptUrl'    => $result['receipt_url'],
 				// Recommended keys.
-				'reference'     => $result['ref'],
-				'receipt_url'   => $result['downloadUrl'],
-				'pdf_available' => isset( $result['pdfAvailable'] ) ? (bool) $result['pdfAvailable'] : ! empty( $result['downloadUrl'] ),
-				'pdfAvailable'  => isset( $result['pdfAvailable'] ) ? (bool) $result['pdfAvailable'] : ! empty( $result['downloadUrl'] ),
-				'receipt_id'    => $result['receiptId'],
-				'receiptId'     => $result['receiptId'],
-				'created_at'    => $result['createdAt'],
+				'reference'     => $result['reference'],
+				'receipt_url'   => $result['receipt_url'],
+				'pdf_available' => (bool) $result['pdf_available'],
+				'pdfAvailable'  => (bool) $result['pdf_available'],
+				'receipt_id'    => $result['receipt_id'],
+				'receiptId'     => $result['receipt_id'],
+				'created_at'    => $result['created_at'],
+				'updated_at'    => $result['updated_at'],
+				'telephone'     => $result['telephone'],
 				'extra_fields'  => $result['extraFields'] ?? array(),
 				'notes'         => $result['messageNotes'] ?? '',
 				'messageNotes'  => $result['messageNotes'] ?? '',
 				// Legacy camelCase keys kept intentionally.
-				'createdAt'     => $result['createdAt'],
+				'createdAt'     => $result['created_at'],
 				'extraFields'   => $result['extraFields'] ?? array(),
+				'downloadUrl'   => $result['receipt_url'],
 			),
 			201
 		);

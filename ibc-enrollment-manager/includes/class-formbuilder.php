@@ -2,10 +2,10 @@
 /**
  * Form Builder service.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -162,6 +162,10 @@ class FormBuilder {
 				'default'     => sanitize_text_field( $field['default'] ?? '' ),
 			);
 
+			if ( 'phone' === $sanitized_field['map'] ) {
+				$sanitized_field['map'] = 'telephone';
+			}
+
 			if ( '' === $sanitized_field['label'] ) {
 				$sanitized_field['label'] = ucwords( str_replace( array( '_', '-' ), ' ', $id ) );
 			}
@@ -307,7 +311,7 @@ class FormBuilder {
 				'default'     => '',
 			),
 			array(
-				'id'          => 'phone',
+				'id'          => 'telephone',
 				'label'       => __( 'Téléphone', 'ibc-enrollment-manager' ),
 				'placeholder' => __( 'Ex: +212 612-345678', 'ibc-enrollment-manager' ),
 				'type'        => 'tel',
@@ -319,39 +323,39 @@ class FormBuilder {
 				'accept'      => '',
 				'order'       => 40,
 				'locked'      => true,
-				'map'         => 'phone',
+				'map'         => 'telephone',
 				'default'     => '',
 			),
 			array(
-				'id'          => 'birth_date',
+				'id'          => 'date_naissance',
 				'label'       => __( 'Date de naissance', 'ibc-enrollment-manager' ),
 				'placeholder' => '',
 				'type'        => 'date',
 				'width'       => 'half',
-				'required'    => false,
+				'required'    => true,
 				'active'      => true,
 				'help'        => '',
 				'choices'     => array(),
 				'accept'      => '',
 				'order'       => 50,
 				'locked'      => true,
-				'map'         => 'birth_date',
+				'map'         => 'date_naissance',
 				'default'     => '',
 			),
 			array(
-				'id'          => 'birth_place',
+				'id'          => 'lieu_naissance',
 				'label'       => __( 'Lieu de naissance', 'ibc-enrollment-manager' ),
 				'placeholder' => __( 'Ville, pays', 'ibc-enrollment-manager' ),
 				'type'        => 'text',
 				'width'       => 'half',
-				'required'    => false,
+				'required'    => true,
 				'active'      => true,
 				'help'        => '',
 				'choices'     => array(),
 				'accept'      => '',
 				'order'       => 60,
 				'locked'      => true,
-				'map'         => 'birth_place',
+				'map'         => 'lieu_naissance',
 				'default'     => '',
 			),
 			array(
@@ -370,7 +374,7 @@ class FormBuilder {
 							'label' => $level,
 						);
 					},
-					array( 'A1', 'A2', 'B1', 'B2', 'C1', 'C2' )
+					array( 'A1', 'A2', 'B1', 'B2', 'C1' )
 				),
 				'accept'      => '',
 				'order'       => 70,
@@ -400,7 +404,7 @@ class FormBuilder {
 				'placeholder' => '',
 				'type'        => 'file',
 				'width'       => 'half',
-				'required'    => false,
+				'required'    => true,
 				'active'      => true,
 				'help'        => __( 'Formats acceptés : JPG, PNG, PDF', 'ibc-enrollment-manager' ),
 				'choices'     => array(),
@@ -416,7 +420,7 @@ class FormBuilder {
 				'placeholder' => '',
 				'type'        => 'file',
 				'width'       => 'half',
-				'required'    => false,
+				'required'    => true,
 				'active'      => true,
 				'help'        => __( 'Formats acceptés : JPG, PNG, PDF', 'ibc-enrollment-manager' ),
 				'choices'     => array(),

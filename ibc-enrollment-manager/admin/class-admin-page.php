@@ -2,10 +2,10 @@
 /**
  * Shared admin page helpers.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC\Admin;
+namespace IBC\Enrollment\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

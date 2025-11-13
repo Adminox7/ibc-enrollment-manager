@@ -2,10 +2,10 @@
 /**
  * Registration domain logic.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 use WP_Error;
 
@@ -79,7 +79,7 @@ class Registrations {
 			'capacity'    => $limit,
 			'total'       => $total,
 			'existsEmail' => (bool) $exists['email'],
-			'existsPhone' => (bool) $exists['phone'],
+			'existsPhone' => (bool) $exists['telephone'],
 		);
 	}
 
@@ -93,18 +93,33 @@ class Registrations {
 	 */
 	public function create_registration( array $payload, array $files = array() ) {
 		$schema           = $this->form_builder->get_active_schema();
-		$allowed_columns  = array( 'prenom', 'nom', 'birth_date', 'birth_place', 'email', 'phone', 'niveau', 'message', 'cin_recto_url', 'cin_verso_url' );
+		$allowed_columns  = array(
+			'prenom',
+			'nom',
+			'date_naissance',
+			'lieu_naissance',
+			'email',
+			'telephone',
+			'niveau',
+			'message',
+			'cin_recto_url',
+			'cin_verso_url',
+		);
 		$mapped           = array_fill_keys( $allowed_columns, '' );
-		$notes            = '';
-		$extra_fields     = array();
-		$email_value      = '';
-		$phone_value      = '';
-		$required_missing = array();
+		$notes             = '';
+		$extra_fields      = array();
+		$email_value       = '';
+		$telephone_value   = '';
+		$required_missing  = array();
 
 		foreach ( $schema as $field ) {
 			$field_id = $field['id'];
 			$type     = $field['type'] ?? 'text';
 			$map      = sanitize_key( $field['map'] ?? '' );
+			$normalized_map = $map;
+			if ( 'phone' === $normalized_map ) {
+				$normalized_map = 'telephone';
+			}
 			$required = ! empty( $field['required'] );
 			$value    = '';
 
@@ -144,11 +159,11 @@ class Registrations {
 				$required_missing[] = $field['label'] ?? $field_id;
 			}
 
-			if ( $map && in_array( $map, $allowed_columns, true ) ) {
-				if ( 'message' === $map ) {
+			if ( $normalized_map && in_array( $normalized_map, $allowed_columns, true ) ) {
+				if ( 'message' === $normalized_map ) {
 					$notes = ibc_sanitize_textarea( $value );
 				} else {
-					$mapped[ $map ] = $value;
+					$mapped[ $normalized_map ] = $value;
 				}
 			} else {
 				if ( '' === $value ) {
@@ -164,12 +179,12 @@ class Registrations {
 				);
 			}
 
-			if ( 'email' === $map || 'email' === $field_id ) {
+			if ( 'email' === $normalized_map || 'email' === $field_id ) {
 				$email_value = $mapped['email'] ?: $value;
 			}
 
-			if ( 'phone' === $map || 'phone' === $field_id ) {
-				$phone_value = $mapped['phone'] ?: $value;
+			if ( 'telephone' === $normalized_map || 'telephone' === $field_id || 'phone' === $map || 'phone' === $field_id ) {
+				$telephone_value = $mapped['telephone'] ?: $value;
 			}
 		}
 
@@ -185,12 +200,12 @@ class Registrations {
 		}
 
 		// Ensure essential fields exist.
-		if ( empty( $mapped['prenom'] ) || empty( $mapped['nom'] ) || empty( $mapped['niveau'] ) || empty( $email_value ) || empty( $phone_value ) ) {
+		if ( empty( $mapped['prenom'] ) || empty( $mapped['nom'] ) || empty( $mapped['niveau'] ) || empty( $email_value ) || empty( $telephone_value ) ) {
 			return new WP_Error( 'ibc_missing_core', \__( 'Les informations principales sont incomplètes.', 'ibc-enrollment-manager' ) );
 		}
 
 		// Rate limit per email/phone combination.
-		$rate_key = 'register_' . md5( $email_value . $phone_value );
+		$rate_key = 'register_' . md5( $email_value . $telephone_value );
 		if ( ibc_rate_limit( $rate_key, 10, false ) ) {
 			return new WP_Error( 'ibc_rate_limit', \__( 'Merci de patienter quelques instants avant de réessayer.', 'ibc-enrollment-manager' ) );
 		}
@@ -201,8 +216,8 @@ class Registrations {
 			return new WP_Error( 'ibc_capacity_full', \__( 'Les inscriptions sont complètes pour le moment.', 'ibc-enrollment-manager' ) );
 		}
 
-		$duplicates = $this->find_existing( $email_value, $phone_value );
-		if ( $duplicates['email'] || $duplicates['phone'] ) {
+		$duplicates = $this->find_existing( $email_value, $telephone_value );
+		if ( $duplicates['email'] || $duplicates['telephone'] ) {
 			return new WP_Error(
 				'ibc_duplicate',
 				\__( 'Une inscription existe déjà avec cet email ou ce numéro de téléphone.', 'ibc-enrollment-manager' )
@@ -214,20 +229,20 @@ class Registrations {
 		$full_name = trim( $mapped['prenom'] . ' ' . $mapped['nom'] );
 
 		$row = array(
-			'created_at'    => $timestamp,
-			'ref'           => $reference,
-			'prenom'        => $mapped['prenom'],
-			'nom'           => $mapped['nom'],
-			'full_name'     => $full_name,
-			'birth_date'    => $mapped['birth_date'],
-			'birth_place'   => $mapped['birth_place'],
-			'email'         => $email_value,
-			'phone'         => $phone_value,
-			'niveau'        => $mapped['niveau'],
-			'message'       => $this->encode_message_payload( $notes, $extra_fields ),
-			'cin_recto_url' => $mapped['cin_recto_url'],
-			'cin_verso_url' => $mapped['cin_verso_url'],
-			'statut'        => 'Confirme',
+			'created_at'     => $timestamp,
+			'updated_at'     => $timestamp,
+			'reference'      => $reference,
+			'prenom'         => $mapped['prenom'],
+			'nom'            => $mapped['nom'],
+			'date_naissance' => '' !== $mapped['date_naissance'] ? $mapped['date_naissance'] : null,
+			'lieu_naissance' => '' !== $mapped['lieu_naissance'] ? $mapped['lieu_naissance'] : null,
+			'email'          => $email_value,
+			'telephone'      => $telephone_value,
+			'niveau'         => $mapped['niveau'],
+			'message'        => $this->encode_message_payload( $notes, $extra_fields ),
+			'cin_recto_url'  => '' !== $mapped['cin_recto_url'] ? $mapped['cin_recto_url'] : null,
+			'cin_verso_url'  => '' !== $mapped['cin_verso_url'] ? $mapped['cin_verso_url'] : null,
+			'statut'         => 'Confirme',
 		);
 
 		$insert_id = $this->db->insert( $row );
@@ -236,16 +251,24 @@ class Registrations {
 		}
 
 		$context = array(
-			'fullName'    => $full_name,
-			'email'       => $email_value,
-			'phone'       => $phone_value,
-			'level'       => $mapped['niveau'],
-			'ref'         => $reference,
-			'createdAt'   => wp_date( 'd/m/Y H:i', strtotime( $timestamp ) ),
-			'payDeadline' => wp_date( 'd/m/Y H:i', strtotime( '+24 hours' ) ),
-			'price'       => ibc_get_price_prep() . ' MAD',
-			'notes'       => $notes,
-			'extra'       => $extra_fields,
+			'fullName'       => $full_name,
+			'email'          => $email_value,
+			'telephone'      => $telephone_value,
+			'phone'          => $telephone_value,
+			'level'          => $mapped['niveau'],
+			'reference'      => $reference,
+			'ref'            => $reference,
+			'createdAt'      => wp_date( 'd/m/Y H:i', strtotime( $timestamp ) ),
+			'created_at'     => $timestamp,
+			'payDeadline'    => wp_date( 'd/m/Y H:i', strtotime( '+24 hours' ) ),
+			'price'          => ibc_get_price_prep() . ' MAD',
+			'price_numeric'  => ibc_get_price_prep(),
+			'notes'          => $notes,
+			'extra'          => $extra_fields,
+			'dateNaissance'  => ibc_format_date_human( $mapped['date_naissance'] ),
+			'lieuNaissance'  => $mapped['lieu_naissance'],
+			'date_naissance' => $mapped['date_naissance'],
+			'lieu_naissance' => $mapped['lieu_naissance'],
 		);
 
 		$pdf_path    = '';
@@ -254,29 +277,37 @@ class Registrations {
 
 		$pdf_result = $this->pdf->generate_prep_receipt(
 			array(
-				'fullName'    => $context['fullName'],
-				'email'       => $context['email'],
-				'phone'       => $context['phone'],
-				'level'       => $context['level'],
-				'ref'         => $context['ref'],
-				'createdAt'   => $context['createdAt'],
-				'payDeadline' => $context['payDeadline'],
-				'price'       => $context['price'],
-				'notes'       => $notes,
-				'extra'       => $extra_fields,
+				'fullName'       => $context['fullName'],
+				'email'          => $context['email'],
+				'telephone'      => $context['telephone'],
+				'level'          => $context['level'],
+				'reference'      => $context['reference'],
+				'createdAt'      => $context['created_at'],
+				'createdAtHuman' => $context['createdAt'],
+				'payDeadline'    => $context['payDeadline'],
+				'price'          => $context['price'],
+				'price_numeric'  => $context['price_numeric'],
+				'notes'          => $notes,
+				'extra'          => $extra_fields,
+				'dateNaissance'  => $context['dateNaissance'],
+				'lieuNaissance'  => $context['lieuNaissance'],
 			)
 		);
 
-		$attachments = array();
-
 		if ( ! is_wp_error( $pdf_result ) ) {
-			$pdf_path = $pdf_result;
-			$attachments[] = $pdf_path;
+			if ( is_array( $pdf_result ) ) {
+				$pdf_path = isset( $pdf_result['path'] ) ? (string) $pdf_result['path'] : '';
+				$pdf_url  = isset( $pdf_result['url'] ) ? (string) $pdf_result['url'] : $pdf_url;
+			} else {
+				$pdf_path = (string) $pdf_result;
+			}
 
-			$attachment = $this->register_pdf_attachment( $pdf_path, $reference );
-			if ( ! is_wp_error( $attachment ) ) {
-				$pdf_mediaId = (int) $attachment['id'];
-				$pdf_url     = (string) $attachment['url'];
+			if ( $pdf_path ) {
+				$attachment = $this->register_pdf_attachment( $pdf_path, $reference );
+				if ( ! is_wp_error( $attachment ) ) {
+					$pdf_mediaId = (int) $attachment['id'];
+					$pdf_url     = (string) $attachment['url'];
+				}
 			}
 		}
 
@@ -284,21 +315,41 @@ class Registrations {
 			$context['receiptUrl'] = $pdf_url;
 		}
 
-		$this->email->send_confirmation( $email_value, $context, $attachments );
+		$email_payload = array(
+			'email'          => $email_value,
+			'telephone'      => $telephone_value,
+			'reference'      => $reference,
+			'niveau'         => $mapped['niveau'],
+			'date_naissance' => $mapped['date_naissance'],
+			'lieu_naissance' => $mapped['lieu_naissance'],
+			'context'        => $context,
+			'receipt_url'    => $pdf_url,
+		);
+
+		$this->email->send_confirmation( $email_payload, $pdf_path );
 
 		ibc_rate_limit( $rate_key, 10 );
 
 		return array(
-			'id'           => $insert_id,
-			'ref'          => $reference,
-			'createdAt'    => $timestamp,
-			'status'       => 'Confirme',
-			'receiptPath'  => $pdf_path,
-			'receiptId'    => $pdf_mediaId,
-			'downloadUrl'  => $pdf_url,
-			'pdfAvailable' => ! empty( $pdf_url ),
-			'extraFields'  => $extra_fields,
-			'messageNotes' => $notes,
+			'id'             => $insert_id,
+			'reference'      => $reference,
+			'ref'            => $reference,
+			'email'          => $email_value,
+			'telephone'      => $telephone_value,
+			'created_at'     => $timestamp,
+			'updated_at'     => $timestamp,
+			'status'         => 'Confirme',
+			'receipt_path'   => $pdf_path,
+			'receiptPath'    => $pdf_path,
+			'receipt_id'     => $pdf_mediaId,
+			'receiptId'      => $pdf_mediaId,
+			'receipt_url'    => $pdf_url,
+			'receiptUrl'     => $pdf_url,
+			'downloadUrl'    => $pdf_url,
+			'pdf_available'  => ! empty( $pdf_url ),
+			'pdfAvailable'   => ! empty( $pdf_url ),
+			'extraFields'    => $extra_fields,
+			'messageNotes'   => $notes,
 		);
 	}
 
@@ -324,22 +375,27 @@ class Registrations {
 			$message = $this->decode_message_payload( $row['message'] );
 
 			$output[] = array(
-				'row'           => (int) $row['id'],
-				'timestamp'     => $row['created_at'],
-				'prenom'        => $row['prenom'],
-				'nom'           => $row['nom'],
-				'fullName'      => $row['full_name'],
-				'dateNaissance' => $row['birth_date'],
-				'lieuNaissance' => $row['birth_place'],
-				'email'         => $row['email'],
-				'phone'         => $row['phone'],
-				'level'         => $row['niveau'],
-				'message'       => $message['notes'],
-				'extraFields'   => $message['extra'],
-				'cinRectoUrl'   => $row['cin_recto_url'],
-				'cinVersoUrl'   => $row['cin_verso_url'],
-				'ref'           => $row['ref'],
-				'statut'        => $row['statut'],
+				'row'            => (int) $row['id'],
+				'created_at'     => $row['created_at'],
+				'timestamp'      => $row['created_at'],
+				'updated_at'     => $row['updated_at'],
+				'prenom'         => $row['prenom'],
+				'nom'            => $row['nom'],
+				'fullName'       => trim( $row['prenom'] . ' ' . $row['nom'] ),
+				'dateNaissance'  => ibc_format_date_human( $row['date_naissance'] ),
+				'date_naissance' => $row['date_naissance'],
+				'lieuNaissance'  => $row['lieu_naissance'],
+				'email'          => $row['email'],
+				'telephone'      => $row['telephone'],
+				'phone'          => $row['telephone'],
+				'level'          => $row['niveau'],
+				'message'        => $message['notes'],
+				'extraFields'    => $message['extra'],
+				'cinRectoUrl'    => $row['cin_recto_url'],
+				'cinVersoUrl'    => $row['cin_verso_url'],
+				'reference'      => $row['reference'],
+				'ref'            => $row['reference'],
+				'statut'         => $row['statut'],
 			);
 		}
 
@@ -358,9 +414,10 @@ class Registrations {
 	 * @return bool|WP_Error
 	 */
 	public function update_registration( int $id, array $fields ) {
-		$allowed   = array( 'prenom', 'nom', 'birth_date', 'birth_place', 'email', 'phone', 'niveau', 'message', 'statut', 'cin_recto_url', 'cin_verso_url' );
-		$data      = array();
-		$new_notes = null;
+		$allowed     = array( 'prenom', 'nom', 'date_naissance', 'lieu_naissance', 'email', 'telephone', 'niveau', 'message', 'statut', 'cin_recto_url', 'cin_verso_url' );
+		$data        = array();
+		$new_notes   = null;
+		$current_row = null;
 
 		foreach ( $allowed as $key ) {
 			if ( ! array_key_exists( $key, $fields ) ) {
@@ -373,18 +430,24 @@ class Registrations {
 				case 'email':
 					$value = ibc_normalize_email( (string) $value );
 					break;
-				case 'phone':
+				case 'telephone':
 					$value = ibc_normalize_phone( (string) $value );
+					break;
+				case 'date_naissance':
+					$value = $this->sanitize_date_for_storage( (string) $value );
 					break;
 				case 'message':
 					$new_notes = ibc_sanitize_textarea( (string) $value );
 					continue 2;
-					break;
 				case 'statut':
 					$value = $this->normalize_status( (string) $value );
 					if ( ! $value ) {
 						return new WP_Error( 'ibc_status', \__( 'Statut invalide.', 'ibc-enrollment-manager' ) );
 					}
+					break;
+				case 'cin_recto_url':
+				case 'cin_verso_url':
+					$value = esc_url_raw( (string) $value );
 					break;
 				default:
 					$value = sanitize_text_field( (string) $value );
@@ -398,25 +461,18 @@ class Registrations {
 			return false;
 		}
 
-		if ( isset( $data['prenom'] ) || isset( $data['nom'] ) ) {
-			$row = $this->db->get( $id );
-			if ( $row ) {
-				$prenom = $data['prenom'] ?? $row['prenom'];
-				$nom    = $data['nom'] ?? $row['nom'];
-				$data['full_name'] = trim( $prenom . ' ' . $nom );
-			}
-		}
-
 		if ( null !== $new_notes ) {
-			$row = $row ?? $this->db->get( $id );
-			if ( $row ) {
-				$decoded         = $this->decode_message_payload( $row['message'] );
+			$current_row = $current_row ?? $this->db->get( $id );
+			if ( $current_row ) {
+				$decoded         = $this->decode_message_payload( $current_row['message'] );
 				$decoded['notes'] = $new_notes;
 				$data['message']  = $this->encode_message_payload( $decoded['notes'], $decoded['extra'] );
 			} else {
 				$data['message'] = $this->encode_message_payload( $new_notes, array() );
 			}
 		}
+
+		$data['updated_at'] = ibc_now();
 
 		return $this->db->update( $id, $data );
 	}
@@ -435,14 +491,47 @@ class Registrations {
 				return ibc_normalize_email( $value );
 			case 'tel':
 				return ibc_normalize_phone( $value );
+			case 'date':
+				$sanitized = $this->sanitize_date_for_storage( $value );
+				return $sanitized ?? '';
 			case 'textarea':
 				return ibc_sanitize_textarea( $value );
-			case 'select':
-			case 'date':
-			case 'text':
 			default:
 				return sanitize_text_field( $value );
 		}
+	}
+
+	/**
+	 * Normalize date input to Y-m-d or null.
+	 *
+	 * @param string $value Raw value.
+	 *
+	 * @return string|null
+	 */
+	private function sanitize_date_for_storage( string $value ): ?string {
+		$value = trim( $value );
+
+		if ( '' === $value ) {
+			return null;
+		}
+
+		if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+			return $value;
+		}
+
+		if ( preg_match( '/^\d{2}\/\d{2}\/\d{4}$/', $value ) ) {
+			$parts = explode( '/', $value );
+
+			return sprintf( '%04d-%02d-%02d', (int) $parts[2], (int) $parts[1], (int) $parts[0] );
+		}
+
+		$timestamp = strtotime( $value );
+
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		return gmdate( 'Y-m-d', $timestamp );
 	}
 
 	/**
@@ -554,11 +643,11 @@ class Registrations {
 	 * @param string $email Email.
 	 * @param string $phone Phone.
 	 *
-	 * @return array{email:array|null,phone:array|null}
+	 * @return array{email:array|null,telephone:array|null}
 	 */
 	private function find_existing( string $email, string $phone ): array {
-		$email_row = null;
-		$phone_row = null;
+		$email_row     = null;
+		$telephone_row = null;
 
 		if ( $email ) {
 			$email_row = $this->db->get_by_email( $email );
@@ -568,15 +657,15 @@ class Registrations {
 		}
 
 		if ( $phone ) {
-			$phone_row = $this->db->get_by_phone( $phone );
-			if ( $phone_row && 'Annule' === $phone_row['statut'] ) {
-				$phone_row = null;
+			$telephone_row = $this->db->get_by_phone( $phone );
+			if ( $telephone_row && 'Annule' === $telephone_row['statut'] ) {
+				$telephone_row = null;
 			}
 		}
 
 		return array(
-			'email' => $email_row,
-			'phone' => $phone_row,
+			'email'      => $email_row,
+			'telephone'  => $telephone_row,
 		);
 	}
 
@@ -592,11 +681,29 @@ class Registrations {
 			return array( 'url' => '' );
 		}
 
-		$allowed = array( 'image/jpeg', 'image/png', 'application/pdf' );
-		$type    = $file['type'] ?? '';
+		$allowed_extensions = array( 'jpg', 'jpeg', 'png', 'pdf' );
+		$checked            = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'], array(
+			'jpg'  => 'image/jpeg',
+			'jpeg' => 'image/jpeg',
+			'png'  => 'image/png',
+			'pdf'  => 'application/pdf',
+		) );
 
-		if ( ! in_array( $type, $allowed, true ) ) {
+		$ext  = strtolower( $checked['ext'] ?? '' );
+		$type = $checked['type'] ?? '';
+
+		if ( empty( $ext ) || ! in_array( $ext, $allowed_extensions, true ) ) {
 			return new WP_Error( 'ibc_upload_type', \__( 'Format de fichier non autorisé.', 'ibc-enrollment-manager' ) );
+		}
+
+		if ( empty( $type ) ) {
+			$mime_map = array(
+				'jpg'  => 'image/jpeg',
+				'jpeg' => 'image/jpeg',
+				'png'  => 'image/png',
+				'pdf'  => 'application/pdf',
+			);
+			$type = $mime_map[ $ext ] ?? 'application/octet-stream';
 		}
 
 		if ( ! function_exists( 'wp_handle_upload' ) ) {
@@ -607,6 +714,12 @@ class Registrations {
 			$file,
 			array(
 				'test_form' => false,
+				'mimes'     => array(
+					'jpg'  => 'image/jpeg',
+					'jpeg' => 'image/jpeg',
+					'png'  => 'image/png',
+					'pdf'  => 'application/pdf',
+				),
 			)
 		);
 

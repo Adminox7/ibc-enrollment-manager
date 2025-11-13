@@ -12,16 +12,16 @@
 .ibc-form-card {
 	background: var(--ibc-form-muted, #ffffff);
 	border-radius: 16px;
-	border: 1px solid var(--ibc-form-border, rgba(15, 23, 42, 0.08));
+	border: 1px solid var(--ibc-form-border, #e5e7eb);
 	box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.35);
 	padding: 2.5rem 2.75rem;
-	color: var(--ibc-form-text, #0f172a);
+	color: var(--ibc-form-text, #1f2937);
 }
 
 .ibc-form-title {
 	margin: 0;
 	font-size: 1.875rem;
-	color: var(--ibc-form-secondary, #0f172a);
+	color: var(--ibc-form-secondary, #2a8e8e);
 }
 
 .ibc-form-subtitle {
@@ -57,20 +57,20 @@
 
 .ibc-form-field label {
 	font-weight: 600;
-	color: var(--ibc-form-secondary, #0f172a);
+	color: var(--ibc-form-secondary, #2a8e8e);
 	display: flex;
 	align-items: center;
 	gap: 0.25rem;
 }
 
 .ibc-form-required {
-	color: var(--ibc-form-primary, #e94162);
+	color: var(--ibc-form-primary, #4cb4b4);
 }
 
 .ibc-form-field input,
 .ibc-form-field select,
 .ibc-form-field textarea {
-	border: 1px solid var(--ibc-form-border, #cbd5f5);
+	border: 1px solid var(--ibc-form-border, #e5e7eb);
 	border-radius: 10px;
 	padding: 0.8rem 0.95rem;
 	font-size: 1rem;
@@ -83,8 +83,8 @@
 .ibc-form-field select:focus,
 .ibc-form-field textarea:focus {
 	outline: none;
-	border-color: var(--ibc-form-primary, #6366f1);
-	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+	border-color: var(--ibc-form-primary, #4cb4b4);
+	box-shadow: 0 0 0 3px rgba(76, 180, 180, 0.25);
 }
 
 .ibc-form-field input[type="file"] {
@@ -117,27 +117,27 @@
 }
 
 .ibc-button-primary {
-	background: var(--ibc-form-button, #e94162);
+	background: var(--ibc-form-button, #4cb4b4);
 	color: var(--ibc-form-button-text, #ffffff);
-	box-shadow: 0 16px 24px -18px rgba(233, 65, 98, 0.3);
+	box-shadow: 0 16px 24px -18px rgba(76, 180, 180, 0.3);
 }
 
 .ibc-button-primary:hover {
 	transform: translateY(-1px);
-	box-shadow: 0 18px 30px -18px rgba(233, 65, 98, 0.45);
+	box-shadow: 0 18px 30px -18px rgba(76, 180, 180, 0.45);
 }
 
 .ibc-button-secondary {
 	background: #ffffff;
-	color: var(--ibc-form-secondary, #0f172a);
-	border: 1px solid rgba(15, 23, 42, 0.12);
+	color: var(--ibc-form-secondary, #2a8e8e);
+	border: 1px solid rgba(42, 142, 142, 0.18);
 }
 
 .ibc-form-feedback {
 	padding: 1rem 1.25rem;
 	border-radius: 12px;
 	background: var(--ibc-form-error-bg, #fee2e2);
-	color: var(--ibc-form-error-text, #991b1b);
+	color: var(--ibc-form-error-text, #b91c1c);
 	font-weight: 500;
 }
 
@@ -187,14 +187,14 @@
 	justify-content: center;
 	margin: 0 auto 0.35rem;
 	font-size: 1.8rem;
-	background: rgba(45, 212, 191, 0.18);
-	color: var(--ibc-form-primary, #e94162);
+	background: rgba(76, 180, 180, 0.18);
+	color: var(--ibc-form-primary, #4cb4b4);
 }
 
 .ibc-popup-card h3 {
 	margin: 0;
 	font-size: 1.75rem;
-	color: var(--ibc-form-secondary, #0f172a);
+	color: var(--ibc-form-secondary, #2a8e8e);
 }
 
 .ibc-popup-card p {

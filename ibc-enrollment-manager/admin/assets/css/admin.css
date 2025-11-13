@@ -728,9 +728,9 @@
 }
 
 .ibc-settings-page .nav-tab-active {
-	background: #e94162;
+	background: #4cb4b4;
 	color: #ffffff;
-	border-color: #e94162;
+	border-color: #4cb4b4;
 }
 
 .ibc-settings-form .form-table th {
@@ -1016,12 +1016,12 @@
 
 .ibc-preview-form .button-primary {
 	align-self: flex-end;
-	background: var(--ibc-preview-button-bg, #e94162);
+	background: var(--ibc-preview-button-bg, #4cb4b4);
 	color: var(--ibc-preview-button-text, #ffffff);
 	border: none;
 	border-radius: 999px;
 	padding: 0.65rem 1.8rem;
-	box-shadow: 0 16px 24px -18px rgba(233, 65, 98, 0.6);
+	box-shadow: 0 16px 24px -18px rgba(76, 180, 180, 0.45);
 }
 
 .ibc-builder-theme {

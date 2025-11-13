@@ -2,10 +2,10 @@
 /**
  * Email utilities.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -19,29 +19,103 @@ class Email {
 	/**
 	 * Send confirmation email to registrant.
 	 *
-	 * @param string $to          Recipient email.
-	 * @param array  $context     Contextual data (fullName, email, phone, level, ref, price, payDeadline).
-	 * @param array  $attachments Optional attachments.
+	 * @param array  $registration Registration data.
+	 * @param string $pdf_path     Absolute PDF path.
 	 *
 	 * @return bool
 	 */
-	public function send_confirmation( string $to, array $context, array $attachments = array() ): bool {
+	public function send_confirmation( array $registration, string $pdf_path ): bool {
+		$to = isset( $registration['email'] ) ? ibc_normalize_email( (string) $registration['email'] ) : '';
+
 		if ( empty( $to ) || ! is_email( $to ) ) {
 			return false;
 		}
 
-		$subject = \__( 'Préinscription reçue – IBC MOROCCO', 'ibc-enrollment-manager' );
+		$brand_name = ibc_get_brand_name();
+		$subject    = sprintf( \__( 'Préinscription reçue – %s', 'ibc-enrollment-manager' ), $brand_name );
 
 		$headers   = array( 'Content-Type: text/html; charset=UTF-8' );
 		$from_mail = (string) get_option( 'ibc_contact_email', '' );
 		if ( is_email( $from_mail ) ) {
-			$headers[] = 'From: IBC Morocco <' . $from_mail . '>';
-			$headers[] = 'Reply-To: IBC Morocco <' . $from_mail . '>';
+			$headers[] = sprintf( 'From: %s <%s>', $brand_name, $from_mail );
+			$headers[] = sprintf( 'Reply-To: %s <%s>', $brand_name, $from_mail );
 		}
 
-		$html = $this->build_email_html( $context );
+		$context = $this->prepare_email_context( $registration, $brand_name, $pdf_path );
+		$html    = $this->build_email_html( $context );
+
+		$attachments = array();
+		if ( $pdf_path && file_exists( $pdf_path ) ) {
+			$attachments[] = $pdf_path;
+		}
 
 		return wp_mail( $to, $subject, $html, $headers, $attachments );
+	}
+
+	/**
+	 * Prepare context for email rendering.
+	 *
+	 * @param array  $registration Registration data.
+	 * @param string $brand_name   Brand name.
+	 * @param string $pdf_path     PDF path.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function prepare_email_context( array $registration, string $brand_name, string $pdf_path ): array {
+		$context = isset( $registration['context'] ) && is_array( $registration['context'] )
+			? $registration['context']
+			: array();
+
+		$email       = ibc_normalize_email( (string) ( $registration['email'] ?? $context['email'] ?? '' ) );
+		$full_name   = trim( (string) ( $context['fullName'] ?? ( ( $registration['prenom'] ?? '' ) . ' ' . ( $registration['nom'] ?? '' ) ) ) );
+		$reference   = (string) ( $context['reference'] ?? $context['ref'] ?? $registration['reference'] ?? $registration['ref'] ?? '' );
+		$telephone   = (string) ( $context['telephone'] ?? $context['phone'] ?? $registration['telephone'] ?? '' );
+		$level       = (string) ( $context['level'] ?? $registration['niveau'] ?? '' );
+		$created_raw = (string) ( $context['created_at'] ?? $registration['created_at'] ?? ibc_now() );
+		$created_ts  = strtotime( $created_raw ) ?: time();
+		$created_human = (string) ( $context['createdAt'] ?? wp_date( 'd/m/Y H:i', $created_ts ) );
+		$deadline_human = (string) ( $context['payDeadline'] ?? wp_date( 'd/m/Y H:i', strtotime( '+24 hours', $created_ts ) ) );
+		$price_display  = (string) ( $context['price'] ?? ( ibc_get_price_prep() . ' MAD' ) );
+		$price_numeric  = (float) ( $context['price_numeric'] ?? ibc_get_price_prep() );
+		$receipt_url    = (string) ( $registration['receipt_url'] ?? $registration['receiptUrl'] ?? $context['receiptUrl'] ?? '' );
+		$notes          = ibc_sanitize_textarea( (string) ( $context['notes'] ?? $registration['notes'] ?? $registration['messageNotes'] ?? '' ) );
+		$extra_fields   = $context['extra'] ?? $context['extraFields'] ?? $registration['extraFields'] ?? array();
+		$extra_fields   = is_array( $extra_fields ) ? array_values( $extra_fields ) : array();
+		$date_source    = $context['dateNaissance'] ?? $registration['date_naissance'] ?? '';
+		$date_naissance = ibc_format_date_human( $date_source );
+		if ( '' === $date_naissance && ! empty( $registration['date_naissance'] ) ) {
+			$date_naissance = ibc_format_date_human( $registration['date_naissance'] );
+		}
+		$lieu_naissance = (string) ( $context['lieuNaissance'] ?? $registration['lieu_naissance'] ?? '' );
+
+		$payment_details = ibc_get_payment_details();
+		$contact_details = array(
+			'address'  => (string) get_option( 'ibc_contact_address', '' ),
+			'email'    => (string) get_option( 'ibc_contact_email', '' ),
+			'phone'    => (string) get_option( 'ibc_contact_phone', '' ),
+			'landline' => (string) get_option( 'ibc_contact_landline', '' ),
+		);
+
+		return array(
+			'brand_name'      => $brand_name,
+			'email'           => $email,
+			'full_name'       => $full_name,
+			'telephone'       => $telephone,
+			'level'           => $level,
+			'reference'       => $reference,
+			'created_human'   => $created_human,
+			'deadline_human'  => $deadline_human,
+			'price_display'   => $price_display,
+			'price_numeric'   => $price_numeric,
+			'date_naissance'  => $date_naissance,
+			'lieu_naissance'  => $lieu_naissance,
+			'notes'           => $notes,
+			'extra'           => $extra_fields,
+			'payment'         => $payment_details,
+			'contact'         => $contact_details,
+			'receipt_url'     => $receipt_url,
+			'has_receipt'     => ( $receipt_url || ( $pdf_path && file_exists( $pdf_path ) ) ),
+		);
 	}
 
 	/**
@@ -52,149 +126,207 @@ class Email {
 	 * @return string
 	 */
 	private function build_email_html( array $context ): string {
-		$colors     = ibc_get_brand_colors_with_legacy();
-		$primary    = $colors['primary'] ?? '#16a085';
-		$secondary  = $colors['secondary'] ?? '#0f172a';
-		$muted      = $colors['muted'] ?? '#f8fafc';
-		$border     = $colors['border'] ?? '#e2e8f0';
-		$brand_name = get_bloginfo( 'name' );
+		$colors    = ibc_get_brand_colors_with_legacy();
+		$primary   = $colors['primary'] ?? '#4CB4B4';
+		$secondary = $colors['secondary'] ?? '#2A8E8E';
+		$muted     = $colors['muted'] ?? '#E0F5F5';
+		$border    = $colors['border'] ?? '#E5E7EB';
+		$text      = $colors['text'] ?? '#1F2937';
+		$danger    = $colors['error_text'] ?? '#B91C1C';
 
-		$details = ibc_get_payment_details();
-		$contact = array(
-			'address'  => (string) get_option( 'ibc_contact_address', '' ),
-			'email'    => (string) get_option( 'ibc_contact_email', '' ),
-			'phone'    => (string) get_option( 'ibc_contact_phone', '' ),
-			'landline' => (string) get_option( 'ibc_contact_landline', '' ),
+		$brand_name = $context['brand_name'] ?? ibc_get_brand_name();
+		$payment    = $context['payment'] ?? array();
+		$contact    = $context['contact'] ?? array();
+
+		$payment_rows = array(
+			__( 'Banque', 'ibc-enrollment-manager' )        => $payment['bank_name'] ?? '',
+			__( 'Titulaire', 'ibc-enrollment-manager' )     => $payment['account_holder'] ?? '',
+			__( 'RIB', 'ibc-enrollment-manager' )           => $payment['rib'] ?? '',
+			__( 'IBAN', 'ibc-enrollment-manager' )          => $payment['iban'] ?? '',
+			__( 'BIC / SWIFT', 'ibc-enrollment-manager' )   => $payment['bic'] ?? '',
+			__( 'Agence', 'ibc-enrollment-manager' )        => $payment['agency'] ?? '',
 		);
 
-		$full_name = esc_html( $context['fullName'] ?? '' );
-		$reference = esc_html( $context['ref'] ?? '' );
-		$level     = esc_html( $context['level'] ?? '' );
-		$email     = esc_html( $context['email'] ?? '' );
-		$phone     = esc_html( $context['phone'] ?? '' );
-		$price     = esc_html( $context['price'] ?? ( ibc_get_price_prep() . ' MAD' ) );
-		$created   = esc_html( $context['createdAt'] ?? '' );
-		$deadline  = esc_html( $context['payDeadline'] ?? __( 'Sous 24 heures', 'ibc-enrollment-manager' ) );
+		ob_start();
+		?>
+		<!DOCTYPE html>
+		<html lang="fr">
+		<head>
+			<meta charset="utf-8">
+			<title><?php echo esc_html( $brand_name ); ?></title>
+		</head>
+		<body style="margin:0;padding:0;background:<?php echo esc_attr( $muted ); ?>;font-family:'Inter','Segoe UI',Arial,sans-serif;color:<?php echo esc_attr( $text ); ?>;line-height:1.6;">
+			<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;">
+				<tr>
+					<td align="center">
+						<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:18px;border:1px solid <?php echo esc_attr( $border ); ?>;box-shadow:0 24px 48px -32px rgba(31,41,55,0.25);overflow:hidden;">
+							<tr>
+								<td style="padding:32px;border-bottom:4px solid <?php echo esc_attr( $primary ); ?>;background:linear-gradient(135deg, <?php echo esc_attr( $primary ); ?>, rgba(42,142,142,0.92));color:#ffffff;">
+									<div style="font-size:14px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600;opacity:0.9;"><?php echo esc_html( $brand_name ); ?></div>
+									<h1 style="margin:12px 0 6px;font-size:24px;font-weight:700;line-height:1.35;"><?php esc_html_e( 'Préinscription reçue – Préparation d’examen', 'ibc-enrollment-manager' ); ?></h1>
+									<p style="margin:0;font-size:14px;max-width:520px;"><?php esc_html_e( 'Merci pour votre confiance. Ce message confirme la bonne réception de votre demande de préinscription à la préparation IBC.', 'ibc-enrollment-manager' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<td style="padding:34px 40px;">
+									<p style="margin:0 0 18px;font-size:15px;"><?php printf( esc_html__( 'Bonjour %s,', 'ibc-enrollment-manager' ), esc_html( $context['full_name'] ) ); ?></p>
+									<p style="margin:0 0 24px;font-size:14px;color:rgba(31,41,55,0.72);"><?php esc_html_e( 'Votre préinscription est enregistrée. Merci d’effectuer le paiement sous 24 heures en rappelant la référence ci-dessous.', 'ibc-enrollment-manager' ); ?></p>
 
-		$bank_rows = array(
-			__( 'Banque', 'ibc-enrollment-manager' )                  => esc_html( $details['bank_name'] ?? '' ),
-			__( 'Titulaire', 'ibc-enrollment-manager' )               => esc_html( $details['account_holder'] ?? '' ),
-			__( 'RIB', 'ibc-enrollment-manager' )                     => esc_html( $details['rib'] ?? '' ),
-			__( 'IBAN', 'ibc-enrollment-manager' )                    => esc_html( $details['iban'] ?? '' ),
-			__( 'BIC / SWIFT', 'ibc-enrollment-manager' )             => esc_html( $details['bic'] ?? '' ),
-			__( 'Agence', 'ibc-enrollment-manager' )                  => esc_html( $details['agency'] ?? '' ),
-		);
+									<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0 8px;margin-bottom:28px;">
+										<tr>
+											<td colspan="2" style="padding-bottom:6px;font-size:12px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:<?php echo esc_attr( $secondary ); ?>;"><?php esc_html_e( 'Récapitulatif', 'ibc-enrollment-manager' ); ?></td>
+										</tr>
+										<tr>
+											<td style="padding:14px 16px;background:<?php echo esc_attr( $muted ); ?>;border-radius:12px 0 0 12px;"><strong><?php esc_html_e( 'Référence', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['reference'] ); ?></td>
+											<td style="padding:14px 16px;background:<?php echo esc_attr( $muted ); ?>;border-radius:0 12px 12px 0;"><strong><?php esc_html_e( 'Date de préinscription', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['created_human'] ); ?></td>
+										</tr>
+										<tr>
+											<td style="padding:14px 16px;background:<?php echo esc_attr( $muted ); ?>;border-radius:12px 0 0 12px;"><strong><?php esc_html_e( 'Échéance de paiement', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['deadline_human'] ); ?></td>
+											<td style="padding:14px 16px;background:<?php echo esc_attr( $muted ); ?>;border-radius:0 12px 12px 0;"><strong><?php esc_html_e( 'Frais de préparation', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['price_display'] ); ?></td>
+										</tr>
+									</table>
 
-		$body  = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' . esc_html( $brand_name ) . '</title></head>';
-		$body .= '<body style="margin:0;padding:0;background:' . esc_attr( $muted ) . ';font-family:\'Inter\',Arial,sans-serif;color:' . esc_attr( $secondary ) . ';line-height:1.6;">';
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0;padding:32px 0;">';
-		$body .= '<tr><td align="center">';
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="620" style="background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid rgba(22,160,133,0.12);box-shadow:0 30px 80px -44px rgba(15,118,110,0.25);">';
-		$body .= '<tr><td style="padding:36px 40px;background:linear-gradient(135deg,' . esc_attr( $primary ) . ', rgba(15,118,110,0.92));color:#ffffff;">';
-		$body .= '<div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600;opacity:0.9;">' . esc_html( $brand_name ) . '</div>';
-		$body .= '<h1 style="margin:12px 0 6px;font-size:24px;font-weight:700;line-height:1.3;">' . esc_html__( 'Confirmation de préinscription à la préparation d’examen', 'ibc-enrollment-manager' ) . '</h1>';
-		$body .= '<p style="margin:0;font-size:14px;max-width:480px;">' . esc_html__( 'Votre dossier est bien enregistré. Retrouvez ci-dessous le récapitulatif de votre préinscription ainsi que les prochaines étapes.', 'ibc-enrollment-manager' ) . '</p>';
-		$body .= '</td></tr>';
-		$body .= '<tr><td style="padding:34px 40px;">';
-		$body .= '<p style="margin:0 0 16px;font-size:15px;">' . sprintf( esc_html__( 'Bonjour %s,', 'ibc-enrollment-manager' ), $full_name ) . '</p>';
-		$body .= '<p style="margin:0 0 24px;font-size:14px;color:rgba(15,23,42,0.72);">' . esc_html__( 'Nous confirmons la réception de votre préinscription à la préparation IBC. Pour finaliser votre inscription, merci d’effectuer le paiement sous 24 heures avec la référence ci-dessous.', 'ibc-enrollment-manager' ) . '</p>';
+									<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid <?php echo esc_attr( $border ); ?>;border-radius:16px;overflow:hidden;margin-bottom:24px;">
+										<tr>
+											<td style="background:rgba(76,180,180,0.12);padding:14px 20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:<?php echo esc_attr( $secondary ); ?>;"><?php esc_html_e( 'Informations personnelles', 'ibc-enrollment-manager' ); ?></td>
+										</tr>
+										<tr>
+											<td style="padding:18px 20px;">
+												<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.6;">
+													<tr>
+														<td width="50%"><strong><?php esc_html_e( 'Nom complet', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['full_name'] ); ?></td>
+														<td width="50%"><strong><?php esc_html_e( 'Téléphone', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['telephone'] ); ?></td>
+													</tr>
+													<tr>
+														<td width="50%" style="padding-top:12px;"><strong><?php esc_html_e( 'Email', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['email'] ); ?></td>
+														<td width="50%" style="padding-top:12px;"><strong><?php esc_html_e( 'Niveau', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['level'] ); ?></td>
+													</tr>
+													<?php if ( ! empty( $context['date_naissance'] ) || ! empty( $context['lieu_naissance'] ) ) : ?>
+														<tr>
+															<td width="50%" style="padding-top:12px;"><strong><?php esc_html_e( 'Date de naissance', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['date_naissance'] ); ?></td>
+															<td width="50%" style="padding-top:12px;"><strong><?php esc_html_e( 'Lieu de naissance', 'ibc-enrollment-manager' ); ?></strong><br><?php echo esc_html( $context['lieu_naissance'] ); ?></td>
+														</tr>
+													<?php endif; ?>
+												</table>
+											</td>
+										</tr>
+									</table>
 
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0 8px;font-size:14px;">';
-		$body .= '<tr><td colspan="2" style="padding:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:' . esc_attr( $primary ) . ';">' . esc_html__( 'Récapitulatif', 'ibc-enrollment-manager' ) . '</td></tr>';
-		$body .= '<tr><td style="padding:12px 16px;background:' . esc_attr( $muted ) . ';border-radius:12px 0 0 12px;width:50%;"><strong>' . esc_html__( 'Référence', 'ibc-enrollment-manager' ) . '</strong><br>' . $reference . '</td>';
-		$body .= '<td style="padding:12px 16px;background:' . esc_attr( $muted ) . ';border-radius:0 12px 12px 0;width:50%;"><strong>' . esc_html__( 'Date de préinscription', 'ibc-enrollment-manager' ) . '</strong><br>' . $created . '</td></tr>';
-		$body .= '<tr><td style="padding:12px 16px;background:' . esc_attr( $muted ) . ';border-radius:12px 0 0 12px;width:50%;"><strong>' . esc_html__( 'Échéance de paiement', 'ibc-enrollment-manager' ) . '</strong><br>' . $deadline . '</td>';
-		$body .= '<td style="padding:12px 16px;background:' . esc_attr( $muted ) . ';border-radius:0 12px 12px 0;width:50%;"><strong>' . esc_html__( 'Frais de préparation', 'ibc-enrollment-manager' ) . '</strong><br>' . $price . '</td></tr>';
-		$body .= '</table>';
+									<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(76,180,180,0.35);border-radius:16px;overflow:hidden;margin-bottom:24px;">
+										<tr>
+											<td style="background:<?php echo esc_attr( $primary ); ?>;color:#ffffff;padding:14px 20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;"><?php esc_html_e( 'Coordonnées bancaires (paiement sous 24 h)', 'ibc-enrollment-manager' ); ?></td>
+										</tr>
+										<tr>
+											<td style="padding:20px;">
+												<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.6;">
+													<?php foreach ( $payment_rows as $label => $value ) : ?>
+														<?php if ( ! empty( $value ) ) : ?>
+															<tr>
+																<td style="padding:4px 0;"><strong><?php echo esc_html( $label ); ?> :</strong> <?php echo esc_html( $value ); ?></td>
+															</tr>
+														<?php endif; ?>
+													<?php endforeach; ?>
+													<?php if ( ! empty( $payment['payment_note'] ) ) : ?>
+														<tr>
+															<td style="padding-top:12px;font-style:italic;color:rgba(31,41,55,0.72);"><?php echo esc_html( $payment['payment_note'] ); ?></td>
+														</tr>
+													<?php endif; ?>
+												</table>
+												<div style="margin-top:18px;padding:14px 16px;border:1px dashed rgba(42,142,142,0.45);border-radius:12px;font-weight:600;color:<?php echo esc_attr( $secondary ); ?>;text-align:center;">
+													<?php printf( esc_html__( 'Mentionnez impérativement la référence %s dans l’objet de votre virement.', 'ibc-enrollment-manager' ), esc_html( $context['reference'] ) ); ?>
+												</div>
+											</td>
+										</tr>
+									</table>
 
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:28px 0 24px;border:1px solid ' . esc_attr( $border ) . ';border-radius:16px;overflow:hidden;">';
-		$body .= '<tr><td style="background:rgba(22,160,133,0.1);padding:14px 20px;font-weight:600;text-transform:uppercase;font-size:12px;letter-spacing:0.1em;color:' . esc_attr( $secondary ) . ';">' . esc_html__( 'Informations personnelles', 'ibc-enrollment-manager' ) . '</td></tr>';
-		$body .= '<tr><td style="padding:18px 20px;"><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px;line-height:1.6;">';
-		$body .= '<tr><td width="33%"><strong>' . esc_html__( 'Nom complet', 'ibc-enrollment-manager' ) . '</strong><br>' . $full_name . '</td>';
-		$body .= '<td width="33%"><strong>' . esc_html__( 'Téléphone', 'ibc-enrollment-manager' ) . '</strong><br>' . $phone . '</td>';
-		$body .= '<td width="34%"><strong>' . esc_html__( 'Email', 'ibc-enrollment-manager' ) . '</strong><br>' . $email . '</td></tr>';
-		$body .= '<tr><td colspan="3" style="padding-top:12px;"><strong>' . esc_html__( 'Niveau souhaité', 'ibc-enrollment-manager' ) . '</strong><br>' . $level . '</td></tr>';
-		$body .= '</table></td></tr></table>';
+									<div style="margin-bottom:18px;padding:16px 18px;border-radius:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);color:<?php echo esc_attr( $danger ); ?>;font-weight:600;">
+										<?php esc_html_e( 'Une fois votre inscription validée, elle est définitive et non remboursable.', 'ibc-enrollment-manager' ); ?>
+									</div>
 
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;border:1px solid rgba(22,160,133,0.25);border-radius:16px;overflow:hidden;">';
-		$body .= '<tr><td style="background:' . esc_attr( $primary ) . ';color:#ffffff;padding:14px 20px;font-weight:600;text-transform:uppercase;font-size:12px;letter-spacing:0.1em;">' . esc_html__( 'Coordonnées bancaires (paiement sous 24 h)', 'ibc-enrollment-manager' ) . '</td></tr>';
-		$body .= '<tr><td style="padding:20px;">';
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px;line-height:1.6;">';
-		foreach ( $bank_rows as $label => $value ) {
-			if ( ! $value ) {
-				continue;
-			}
-			$body .= '<tr><td style="padding:4px 0;"><strong>' . esc_html( $label ) . ' :</strong> ' . $value . '</td></tr>';
-		}
-		if ( ! empty( $details['payment_note'] ) ) {
-			$body .= '<tr><td style="padding:10px 0 0;font-style:italic;color:rgba(15,23,42,0.7);">' . esc_html( $details['payment_note'] ) . '</td></tr>';
-		}
-		$body .= '</table>';
-		$body .= '<div style="margin-top:16px;padding:14px 16px;background:#ffffff;border-radius:12px;border:1px dashed rgba(22,160,133,0.45);font-weight:600;color:' . esc_attr( $secondary ) . ';font-size:13px;text-align:center;">' . sprintf( esc_html__( 'Référence à mentionner : %s', 'ibc-enrollment-manager' ), $reference ) . '</div>';
-		$body .= '</td></tr></table>';
+									<div style="margin-bottom:24px;padding:16px 18px;border-radius:14px;background:rgba(250,204,21,0.12);border:1px solid rgba(217,119,6,0.22);color:#92400e;font-weight:600;font-size:13px;">
+										<?php esc_html_e( 'Le paiement doit être réalisé dans les 24 heures suivant la réception de cet e-mail. Au-delà, la préinscription sera automatiquement annulée.', 'ibc-enrollment-manager' ); ?>
+									</div>
 
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-radius:14px;border:1px solid rgba(239,68,68,0.18);background:rgba(239,68,68,0.08);margin-bottom:16px;">';
-		$body .= '<tr><td style="padding:16px 20px;font-size:13px;color:#991b1b;font-weight:600;">' . esc_html__( 'Une fois votre inscription validée, elle est définitive et non remboursable.', 'ibc-enrollment-manager' ) . '</td></tr>';
-		$body .= '</table>';
+									<?php if ( ! empty( $context['notes'] ) ) : ?>
+										<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid <?php echo esc_attr( $border ); ?>;border-radius:14px;overflow:hidden;margin-bottom:24px;">
+											<tr>
+												<td style="background:rgba(76,180,180,0.12);padding:12px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:<?php echo esc_attr( $secondary ); ?>;"><?php esc_html_e( 'Message du candidat', 'ibc-enrollment-manager' ); ?></td>
+											</tr>
+											<tr>
+												<td style="padding:18px;font-size:14px;color:rgba(31,41,55,0.86);"><?php echo nl2br( esc_html( $context['notes'] ) ); ?></td>
+											</tr>
+										</table>
+									<?php endif; ?>
 
-		if ( ! empty( $context['notes'] ) ) {
-			$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 24px;border:1px solid ' . esc_attr( $border ) . ';border-radius:14px;">';
-			$body .= '<tr><td style="background:rgba(15,118,110,0.08);padding:12px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:' . esc_attr( $secondary ) . ';">' . esc_html__( 'Message du candidat', 'ibc-enrollment-manager' ) . '</td></tr>';
-			$body .= '<tr><td style="padding:18px;font-size:14px;color:rgba(15,23,42,0.78);">' . nl2br( esc_html( $context['notes'] ) ) . '</td></tr>';
-			$body .= '</table>';
-		}
+									<?php if ( ! empty( $context['extra'] ) ) : ?>
+										<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(76,180,180,0.25);border-radius:14px;overflow:hidden;margin-bottom:24px;">
+											<tr>
+												<td style="background:rgba(76,180,180,0.12);padding:12px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:<?php echo esc_attr( $secondary ); ?>;"><?php esc_html_e( 'Informations complémentaires', 'ibc-enrollment-manager' ); ?></td>
+											</tr>
+											<tr>
+												<td style="padding:18px;">
+													<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.6;">
+														<?php foreach ( $context['extra'] as $entry ) : ?>
+															<?php
+															if ( empty( $entry['value'] ) ) {
+																continue;
+															}
+															$label = esc_html( $entry['label'] ?? $entry['id'] ?? '' );
+															$value = $entry['value'];
+															if ( ( $entry['type'] ?? '' ) === 'file' && filter_var( $value, FILTER_VALIDATE_URL ) ) {
+																$display = '<a href="' . esc_url( $value ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Télécharger', 'ibc-enrollment-manager' ) . '</a>';
+															} else {
+																$display = esc_html( (string) ( $entry['display'] ?? $value ) );
+															}
+															?>
+															<tr>
+																<td style="padding:3px 0;"><strong><?php echo $label; ?> :</strong> <?php echo $display; ?></td>
+															</tr>
+														<?php endforeach; ?>
+													</table>
+												</td>
+											</tr>
+										</table>
+									<?php endif; ?>
 
-		if ( ! empty( $context['extra'] ) && is_array( $context['extra'] ) ) {
-			$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 24px;border:1px solid rgba(22,160,133,0.14);border-radius:14px;">';
-			$body .= '<tr><td style="background:rgba(22,160,133,0.12);padding:12px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:' . esc_attr( $secondary ) . ';">' . esc_html__( 'Informations complémentaires', 'ibc-enrollment-manager' ) . '</td></tr>';
-			$body .= '<tr><td style="padding:18px;"><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:13px;">';
-			foreach ( $context['extra'] as $entry ) {
-				if ( empty( $entry['value'] ) ) {
-					continue;
-				}
-				$label = esc_html( $entry['label'] ?? $entry['id'] ?? '' );
-				$value = $entry['value'];
-				if ( ( $entry['type'] ?? '' ) === 'file' && filter_var( $value, FILTER_VALIDATE_URL ) ) {
-					$display = '<a href="' . esc_url( $value ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Télécharger', 'ibc-enrollment-manager' ) . '</a>';
-				} else {
-					$display = esc_html( (string) ( $entry['display'] ?? $value ) );
-				}
-				$body .= '<tr><td style="padding:4px 0;"><strong>' . $label . ' :</strong> ' . $display . '</td></tr>';
-			}
-			$body .= '</table></td></tr></table>';
-		}
+									<?php if ( $context['has_receipt'] ) : ?>
+										<p style="margin:0 0 18px;font-size:13px;color:rgba(31,41,55,0.7);">
+											<?php esc_html_e( 'Le reçu de préinscription est joint à cet e-mail. Conservez-le précieusement pour votre dossier.', 'ibc-enrollment-manager' ); ?>
+											<?php if ( ! empty( $context['receipt_url'] ) ) : ?>
+												<br><a href="<?php echo esc_url( $context['receipt_url'] ); ?>" style="color:<?php echo esc_attr( $secondary ); ?>;font-weight:600;text-decoration:none;" target="_blank" rel="noopener noreferrer">
+													<?php esc_html_e( 'Télécharger le reçu', 'ibc-enrollment-manager' ); ?>
+												</a>
+											<?php endif; ?>
+										</p>
+									<?php endif; ?>
 
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-radius:14px;border:1px solid rgba(251,191,36,0.26);background:rgba(251,191,36,0.12);margin-bottom:28px;">';
-		$body .= '<tr><td style="padding:16px 20px;font-size:13px;color:#92400e;font-weight:600;">' . esc_html__( 'Le règlement doit être effectué dans les 24 heures suivant la réception de cet e-mail. Passé ce délai, la préinscription sera automatiquement annulée.', 'ibc-enrollment-manager' ) . '</td></tr>';
-		$body .= '</table>';
+									<p style="margin:0 0 16px;font-size:14px;"><?php esc_html_e( 'Nous restons à votre disposition pour toute question.', 'ibc-enrollment-manager' ); ?></p>
+									<p style="margin:0 0 24px;font-size:14px;"><?php esc_html_e( 'À très vite,', 'ibc-enrollment-manager' ); ?><br><strong><?php echo esc_html( $brand_name ); ?></strong></p>
 
-		if ( ! empty( $context['receiptUrl'] ) ) {
-			$body .= '<p style="margin:0 0 16px;font-size:13px;color:rgba(15,23,42,0.7);">' . esc_html__( 'Le reçu de préinscription est disponible en pièce jointe et téléchargeable à tout moment via votre espace.', 'ibc-enrollment-manager' ) . '</p>';
-		}
+									<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:rgba(31,41,55,0.65);border-top:1px solid <?php echo esc_attr( $border ); ?>;padding-top:18px;">
+										<?php if ( ! empty( $contact['address'] ) ) : ?>
+											<tr><td style="padding:2px 0;"><?php echo esc_html( $contact['address'] ); ?></td></tr>
+										<?php endif; ?>
+										<?php if ( ! empty( $contact['email'] ) ) : ?>
+											<tr><td style="padding:2px 0;"><?php esc_html_e( 'Email :', 'ibc-enrollment-manager' ); ?> <?php echo esc_html( $contact['email'] ); ?></td></tr>
+										<?php endif; ?>
+										<?php if ( ! empty( $contact['phone'] ) ) : ?>
+											<tr><td style="padding:2px 0;"><?php esc_html_e( 'Mobile :', 'ibc-enrollment-manager' ); ?> <?php echo esc_html( $contact['phone'] ); ?></td></tr>
+										<?php endif; ?>
+										<?php if ( ! empty( $contact['landline'] ) ) : ?>
+											<tr><td style="padding:2px 0;"><?php esc_html_e( 'Fixe :', 'ibc-enrollment-manager' ); ?> <?php echo esc_html( $contact['landline'] ); ?></td></tr>
+										<?php endif; ?>
+									</table>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+			</table>
+		</body>
+		</html>
+		<?php
 
-		$body .= '<p style="margin:0 0 16px;font-size:14px;">' . esc_html__( 'Nous restons à votre disposition pour toute question.', 'ibc-enrollment-manager' ) . '</p>';
-		$body .= '<p style="margin:0 0 24px;font-size:14px;">' . esc_html__( 'À très vite,', 'ibc-enrollment-manager' ) . '<br><strong>' . esc_html( $brand_name ) . '</strong></p>';
-
-		$body .= '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:12px;color:rgba(15,23,42,0.65);border-top:1px solid ' . esc_attr( $border ) . ';padding-top:18px;">';
-		if ( ! empty( $contact['address'] ) ) {
-			$body .= '<tr><td style="padding:2px 0;">' . esc_html( $contact['address'] ) . '</td></tr>';
-		}
-		if ( ! empty( $contact['email'] ) ) {
-			$body .= '<tr><td style="padding:2px 0;">' . esc_html__( 'Email :', 'ibc-enrollment-manager' ) . ' ' . esc_html( $contact['email'] ) . '</td></tr>';
-		}
-		if ( ! empty( $contact['phone'] ) ) {
-			$body .= '<tr><td style="padding:2px 0;">' . esc_html__( 'Mobile :', 'ibc-enrollment-manager' ) . ' ' . esc_html( $contact['phone'] ) . '</td></tr>';
-		}
-		if ( ! empty( $contact['landline'] ) ) {
-			$body .= '<tr><td style="padding:2px 0;">' . esc_html__( 'Fixe :', 'ibc-enrollment-manager' ) . ' ' . esc_html( $contact['landline'] ) . '</td></tr>';
-		}
-		$body .= '</table>';
-
-		$body .= '</td></tr>';
-		$body .= '</table>';
-		$body .= '</td></tr></table>';
-		$body .= '</body></html>';
-
-		return $body;
+		return (string) ob_get_clean();
 	}
 }

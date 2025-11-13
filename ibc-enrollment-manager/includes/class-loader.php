@@ -2,10 +2,10 @@
 /**
  * Loader for IBC Enrollment Manager.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

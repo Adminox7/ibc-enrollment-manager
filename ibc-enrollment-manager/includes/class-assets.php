@@ -2,12 +2,12 @@
 /**
  * Assets management.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
-use IBC\FormBuilder;
+use IBC\Enrollment\FormBuilder;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -83,8 +83,8 @@ class Assets {
 					'fields'   => $schema,
 					'colors'   => $colors,
 					'messages' => array(
-						'success'   => esc_html__( 'Votre préinscription est enregistrée. Vous pouvez télécharger votre reçu.', 'ibc-enrollment-manager' ),
-						'successNoPdf' => esc_html__( 'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail.', 'ibc-enrollment-manager' ),
+						'success'   => esc_html__( 'Votre préinscription est enregistrée. Veuillez télécharger votre reçu et effectuer le paiement sous 24 h.', 'ibc-enrollment-manager' ),
+						'successNoPdf' => esc_html__( 'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail et le paiement reste requis sous 24 h.', 'ibc-enrollment-manager' ),
 						'duplicate' => esc_html__( 'Une inscription existe déjà pour ces coordonnées.', 'ibc-enrollment-manager' ),
 						'capacity'  => esc_html__( 'La capacité maximale est atteinte.', 'ibc-enrollment-manager' ),
 						'error'     => esc_html__( 'Une erreur est survenue. Merci de réessayer.', 'ibc-enrollment-manager' ),
