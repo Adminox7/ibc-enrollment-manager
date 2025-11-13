@@ -1,3 +1,4 @@
+/* Legacy admin script - conservé uniquement pour référence. This file is no longer enqueued. */
 /* global IBCDashboard */
 (function () {
 	'use strict';

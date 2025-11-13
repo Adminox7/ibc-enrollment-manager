@@ -280,6 +280,10 @@ class Registrations {
 			}
 		}
 
+		if ( ! empty( $pdf_url ) ) {
+			$context['receiptUrl'] = $pdf_url;
+		}
+
 		$this->email->send_confirmation( $email_value, $context, $attachments );
 
 		ibc_rate_limit( $rate_key, 10 );
@@ -292,6 +296,7 @@ class Registrations {
 			'receiptPath'  => $pdf_path,
 			'receiptId'    => $pdf_mediaId,
 			'downloadUrl'  => $pdf_url,
+			'pdfAvailable' => ! empty( $pdf_url ),
 			'extraFields'  => $extra_fields,
 			'messageNotes' => $notes,
 		);

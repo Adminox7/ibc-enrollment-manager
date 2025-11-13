@@ -83,7 +83,8 @@ class Assets {
 					'fields'   => $schema,
 					'colors'   => $colors,
 					'messages' => array(
-						'success'   => esc_html__( 'Merci ! Votre demande a été reçue.', 'ibc-enrollment-manager' ),
+						'success'   => esc_html__( 'Votre préinscription est enregistrée. Vous pouvez télécharger votre reçu.', 'ibc-enrollment-manager' ),
+						'successNoPdf' => esc_html__( 'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail.', 'ibc-enrollment-manager' ),
 						'duplicate' => esc_html__( 'Une inscription existe déjà pour ces coordonnées.', 'ibc-enrollment-manager' ),
 						'capacity'  => esc_html__( 'La capacité maximale est atteinte.', 'ibc-enrollment-manager' ),
 						'error'     => esc_html__( 'Une erreur est survenue. Merci de réessayer.', 'ibc-enrollment-manager' ),
