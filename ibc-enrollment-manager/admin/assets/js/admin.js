@@ -1,641 +1,401 @@
-/* Legacy admin script - conservé uniquement pour référence. This file is no longer enqueued. */
-/* global IBCDashboard */
+/* global IBCEnrollmentDashboard */
+
 (function () {
 	'use strict';
 
+	const config = window.IBCEnrollmentDashboard;
 	const root = document.querySelector('[data-ibc-dashboard]');
-	if (!root || typeof IBCDashboard === 'undefined') {
+	if (!config || !root) {
 		return;
 	}
 
+	const TOKEN_KEY = 'IBC_ENROLLMENT_TOKEN';
+	const restBase = (config.restUrl || '').replace(/\/$/, '');
+	const getText = (key, fallback) => (config.texts && config.texts[key]) || fallback;
+
+	const $ = (selector, context = root) => context.querySelector(selector);
+	const $$ = (selector, context = root) => Array.prototype.slice.call(context.querySelectorAll(selector));
+
+	const elements = {
+		status: $('[data-ibc-status]'),
+		statusText: $('[data-ibc-status-text]'),
+		tableBody: $('[data-ibc-table-body]'),
+		search: $('#ibc_filter_search'),
+		level: $('#ibc_filter_level'),
+		statut: $('#ibc_filter_status'),
+		perPage: $('#ibc_filter_perpage'),
+		prev: $('#ibc-prev'),
+		next: $('#ibc-next'),
+		pageIndicator: $('[data-ibc-page-indicator]'),
+		refresh: $('[data-ibc-refresh]'),
+		reset: $('[data-ibc-reset]'),
+		exportBtn: $('[data-ibc-export]'),
+		logout: $('[data-ibc-logout]'),
+		loginModal: $('[data-ibc-login]'),
+		loginPassword: $('#ibc_admin_password'),
+		loginSubmit: $('[data-ibc-login-submit]'),
+		loginFeedback: $('[data-ibc-login] .ibc-modal-feedback'),
+		editModal: $('[data-ibc-edit]'),
+		editForm: $('[data-ibc-edit-form]'),
+		editFeedback: $('[data-ibc-edit] .ibc-modal-feedback'),
+		editCancel: $('[data-ibc-edit-cancel]'),
+		docRecto: $('[data-ibc-doc="recto"]'),
+		docVerso: $('[data-ibc-doc="verso"]'),
+		docEmpty: $('[data-ibc-doc-empty]'),
+		extraList: $('[data-ibc-edit-extra] ul'),
+		extraWrapper: $('[data-ibc-edit-extra]'),
+		docsWrapper: $('[data-ibc-edit-docs]'),
+	};
+
 	const state = {
-		token: sessionStorage.getItem('ibcToken') || '',
+		token: sessionStorage.getItem(TOKEN_KEY) || '',
 		page: 1,
-		perPage: 10,
+		perPage: parseInt(elements.perPage?.value, 10) || 10,
 		total: 0,
+		filters: {
+			search: '',
+			niveau: '',
+			statut: '',
+		},
 		loading: false,
-		lastQuery: {},
+		lastItems: [],
 	};
-	let statusTimer = null;
+
 	let searchTimer = null;
+	let statusTimer = null;
 
-	const getText = (key, fallback) => {
-		if (typeof IBCDashboard.texts !== 'object' || IBCDashboard.texts === null) {
-			return fallback;
-		}
-		return typeof IBCDashboard.texts[key] !== 'undefined' ? IBCDashboard.texts[key] : fallback;
-	};
-
-	const escapeHtml = (value = '') =>
-		value
-			.toString()
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
-
-	const displayOrDash = (value) => (value ? escapeHtml(value) : '—');
-
-	const parseDateValue = (value) => {
-		if (!value) {
-			return null;
-		}
-		if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-			const [day, month, year] = value.split('/');
-			const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
-			return Number.isNaN(parsed.getTime()) ? null : parsed;
-		}
-		const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-		const date = new Date(normalized);
-		return Number.isNaN(date.getTime()) ? null : date;
-	};
-
-	const formatDate = (value) => {
-		if (!value) {
-			return '—';
-		}
-		if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-			return value;
-		}
-		if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-			const [year, month, day] = value.split('-');
-			return `${day}/${month}/${year}`;
-		}
-		const date = parseDateValue(value);
-		if (!date) {
-			return value;
-		}
-		try {
-			return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(date);
-		} catch (error) {
-			return value;
-		}
-	};
-
-	const formatDateTime = (value) => {
-		if (!value) {
-			return '—';
-		}
-		const date = parseDateValue(value);
-		if (!date) {
-			return value;
-		}
-		try {
-			return new Intl.DateTimeFormat('fr-FR', {
-				dateStyle: 'short',
-				timeStyle: 'short',
-			}).format(date);
-		} catch (error) {
-			return value;
-		}
-	};
-
-	const ensureJson = async (response) => {
-		const contentType = (response.headers.get('content-type') || '').toLowerCase();
-		if (!contentType.includes('application/json')) {
-			throw new Error(IBCDashboard.texts.nonJson || 'Réponse invalide.');
-		}
-		return response.json();
-	};
-
-	const selectors = {
-		search: '#ibc_filter_search',
-		level: '#ibc_filter_level',
-		status: '#ibc_filter_status',
-		perPage: '#ibc_filter_perpage',
-		tableBody: '[data-ibc-table-body]',
-		pagination: '[data-ibc-pagination]',
-		pageIndicator: '[data-ibc-page-indicator]',
-		statusBar: '[data-ibc-status]',
-		statusText: '[data-ibc-status-text]',
-		refresh: '[data-ibc-refresh]',
-		reset: '[data-ibc-reset]',
-		export: '[data-ibc-export]',
-		logout: '[data-ibc-logout]',
-		prev: '[data-ibc-prev]',
-		next: '[data-ibc-next]',
-		loginModal: '[data-ibc-login]',
-		loginPassword: '#ibc_admin_password',
-		loginButton: '[data-ibc-login-submit]',
-		loginFeedback: '[data-ibc-login] .ibc-modal-feedback',
-		editModal: '[data-ibc-edit]',
-		editForm: '[data-ibc-edit-form]',
-		editFeedback: '[data-ibc-edit] .ibc-modal-feedback',
-		editCancel: '[data-ibc-edit-cancel]',
-		extraPreview: '[data-ibc-edit-extra]',
-		docsPreview: '[data-ibc-edit-docs]',
-		docRecto: '[data-ibc-doc="recto"]',
-		docVerso: '[data-ibc-doc="verso"]',
-		docEmpty: '[data-ibc-doc-empty]',
-	};
-
-	const elements = {};
-	Object.keys(selectors).forEach((key) => {
-		elements[key] = root.querySelector(selectors[key]) || document.querySelector(selectors[key]);
-	});
-
-	const setDashboardStatus = (message, variant = 'ready', timeout = 0) => {
-		if (!elements.statusBar || !elements.statusText) {
+	const setStatus = (message, variant = 'idle', duration = 0) => {
+		if (!elements.status || !elements.statusText) {
 			return;
 		}
-
-		elements.statusBar.classList.remove('is-loading', 'is-error', 'is-success');
+		elements.status.classList.remove('is-loading', 'is-success', 'is-error');
 		if (variant === 'loading') {
-			elements.statusBar.classList.add('is-loading');
-		} else if (variant === 'error') {
-			elements.statusBar.classList.add('is-error');
+			elements.status.classList.add('is-loading');
 		} else if (variant === 'success') {
-			elements.statusBar.classList.add('is-success');
+			elements.status.classList.add('is-success');
+		} else if (variant === 'error') {
+			elements.status.classList.add('is-error');
 		}
-
 		elements.statusText.textContent = message;
-
 		if (statusTimer) {
 			clearTimeout(statusTimer);
 		}
-
-		if (timeout > 0 && variant !== 'loading') {
+		if (duration > 0 && variant !== 'loading') {
 			statusTimer = setTimeout(() => {
-				if (elements.statusBar && elements.statusText) {
-					elements.statusBar.classList.remove('is-loading', 'is-error', 'is-success');
-					elements.statusText.textContent = getText('ready', 'Prêt');
-				}
-			}, timeout);
+				elements.status.classList.remove('is-loading', 'is-success', 'is-error');
+				elements.statusText.textContent = getText('ready', 'Prêt');
+			}, duration);
 		}
 	};
 
-	const sanitizeCsvValue = (value) =>
-		`"${(value || '')
-			.toString()
-			.replace(/\r?\n/g, ' ')
-			.replace(/"/g, '""')
-			.trim()}"`;
-
-	const cleanPhoneHref = (value) => {
-		if (!value) {
-			return '';
-		}
-		return value.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-	};
-
-	if (elements.perPage) {
-		const initial = parseInt(elements.perPage.value, 10);
-		if (!Number.isNaN(initial) && initial > 0) {
-			state.perPage = initial;
-		}
-	}
-
-	const restFetch = (endpoint, options = {}) => {
-		const url = `${IBCDashboard.restUrl}${endpoint}`;
-		const headers = options.headers || {};
-
+	const apiFetch = (path, options = {}) => {
+		const headers = new Headers(options.headers || {});
 		if (state.token) {
-			headers['X-IBC-Token'] = state.token;
+			headers.set('X-IBC-Token', state.token);
 		}
-
-		return fetch(url, {
+		if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
+			headers.set('Content-Type', 'application/json');
+		}
+		return fetch(`${restBase}${path}`, {
 			credentials: 'same-origin',
 			...options,
 			headers,
 		}).then(async (response) => {
-			const payload = await ensureJson(response);
-			if (!payload.success) {
-				const message = payload.message || IBCDashboard.texts.loginError;
+			const contentType = response.headers.get('content-type') || '';
+			const payload = contentType.includes('application/json') ? await response.json() : {};
+			if (!response.ok || payload.success === false) {
+				const message = payload.message || getText('serverError', 'Erreur serveur.');
 				throw new Error(message);
 			}
 			return payload.data;
 		});
 	};
 
-	const toggleLoginModal = (visible) => {
-		if (elements.loginModal) {
-			elements.loginModal.hidden = !visible;
+	const toggleModal = (modal, show) => {
+		if (!modal) {
+			return;
+		}
+		modal.hidden = !show;
+		modal.setAttribute('aria-hidden', String(!show));
+		document.body.classList.toggle('ibc-modal-open', show);
+		if (show) {
+			const focusable = modal.querySelector('input, button, select, textarea, [tabindex]');
+			focusable?.focus();
 		}
 	};
 
-	const toggleEditModal = (visible) => {
-		if (elements.editModal) {
-			elements.editModal.hidden = !visible;
+	const showLogin = (message) => {
+		if (elements.loginFeedback && message) {
+			elements.loginFeedback.hidden = false;
+			elements.loginFeedback.textContent = message;
 		}
+		toggleModal(elements.loginModal, true);
 	};
 
-	const renderTable = (items) => {
-		const tbody = elements.tableBody;
-		if (!tbody) {
+	const hideLogin = () => {
+		if (elements.loginFeedback) {
+			elements.loginFeedback.hidden = true;
+			elements.loginFeedback.textContent = '';
+		}
+		toggleModal(elements.loginModal, false);
+	};
+
+	const sanitize = (value) =>
+		(value || '')
+			.toString()
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+
+	const renderDocs = (row) => {
+		if (!elements.docsWrapper) {
 			return;
 		}
+		const recto = row.dataset.cinRecto || '';
+		const verso = row.dataset.cinVerso || '';
 
-		tbody.innerHTML = '';
+		if (elements.docRecto) {
+			elements.docRecto.hidden = !recto;
+			if (recto) {
+				elements.docRecto.href = recto;
+			}
+		}
+		if (elements.docVerso) {
+			elements.docVerso.hidden = !verso;
+			if (verso) {
+				elements.docVerso.href = verso;
+			}
+		}
+		if (elements.docEmpty) {
+			elements.docEmpty.hidden = Boolean(recto || verso);
+		}
+		elements.docsWrapper.classList.toggle('is-empty', !recto && !verso);
+		elements.docsWrapper.hidden = !recto && !verso && elements.docEmpty?.hidden;
+	};
 
-		if (!items.length) {
-			const row = document.createElement('tr');
-			row.className = 'ibc-table-empty';
-			row.innerHTML = `<td colspan="14">${getText('empty', 'Aucun résultat.')}</td>`;
-			tbody.appendChild(row);
+	const renderExtras = (row) => {
+		if (!elements.extraWrapper || !elements.extraList) {
 			return;
 		}
-
-		items.forEach((item) => {
-			const row = document.createElement('tr');
-			row.dataset.id = item.row;
-			row.dataset.ref = item.ref;
-			row.dataset.notes = item.message || '';
-			row.dataset.extra = JSON.stringify(item.extraFields || []);
-			row.dataset.prenom = item.prenom || '';
-			row.dataset.nom = item.nom || '';
-			row.dataset.email = item.email || '';
-			row.dataset.phone = item.phone || '';
-			row.dataset.level = item.level || '';
-			row.dataset.status = item.statut || '';
-			row.dataset.cinRecto = item.cinRectoUrl || '';
-			row.dataset.cinVerso = item.cinVersoUrl || '';
-			row.dataset.timestamp = item.timestamp || '';
-			row.dataset.birthdate = item.dateNaissance || '';
-			row.dataset.birthplace = item.lieuNaissance || '';
-
-			const safeRecto = item.cinRectoUrl ? encodeURI(item.cinRectoUrl) : '';
-			const safeVerso = item.cinVersoUrl ? encodeURI(item.cinVersoUrl) : '';
-			const docLabels = {
-				recto: getText('docRecto', 'Recto'),
-				verso: getText('docVerso', 'Verso'),
-				empty: getText('docMissing', 'Non fourni'),
-			};
-
-			const rectoChip = safeRecto
-				? `<a href="${safeRecto}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.recto}</a>`
-				: `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`;
-			const versoChip = safeVerso
-				? `<a href="${safeVerso}" class="ibc-doc-chip" target="_blank" rel="noopener noreferrer">${docLabels.verso}</a>`
-				: `<span class="ibc-doc-chip is-muted">${docLabels.empty}</span>`;
-
-			const messageContent = item.message
-				? `<span class="ibc-message-chip" title="${escapeHtml(item.message)}">${escapeHtml(item.message).replace(/\n/g, '<br>')}</span>`
-				: `<span class="ibc-message-chip is-empty">—</span>`;
-
-			const statusConfirm = getText('statusConfirm', 'Confirmée');
-			const statusCancel = getText('statusCancel', 'Annulée');
-			const saveLabel = getText('save', 'Sauver');
-			const deleteLabel = getText('delete', 'Supprimer');
-
-			row.innerHTML = `
-				<td data-col="timestamp">${formatDateTime(item.timestamp)}</td>
-				<td>${displayOrDash(item.prenom)}</td>
-				<td>${displayOrDash(item.nom)}</td>
-				<td>${formatDate(item.dateNaissance)}</td>
-				<td>${displayOrDash(item.lieuNaissance)}</td>
-				<td>${item.email ? `<a href="mailto:${encodeURIComponent(item.email)}">${escapeHtml(item.email)}</a>` : '—'}</td>
-				<td>${item.phone ? `<a href="tel:${cleanPhoneHref(item.phone)}">${escapeHtml(item.phone)}</a>` : '—'}</td>
-				<td>${displayOrDash(item.level)}</td>
-				<td><div class="ibc-doc-chip-group">${rectoChip}</div></td>
-				<td><div class="ibc-doc-chip-group">${versoChip}</div></td>
-				<td>${messageContent}</td>
-				<td>
-					<button type="button" class="ibc-ref-link" data-ibc-action="details">${escapeHtml(item.ref)}</button>
-				</td>
-				<td>
-					<select class="ibc-status-select" data-ibc-status>
-						<option value="Confirme"${item.statut === 'Confirme' ? ' selected' : ''}>${statusConfirm}</option>
-						<option value="Annule"${item.statut === 'Annule' ? ' selected' : ''}>${statusCancel}</option>
-					</select>
-				</td>
-				<td>
-					<div class="ibc-row-actions">
-						<button type="button" class="ibc-button-primary" data-ibc-action="save">${saveLabel}</button>
-						<button type="button" class="ibc-button-danger" data-ibc-action="delete">${deleteLabel}</button>
-					</div>
-				</td>
-			`;
-			tbody.appendChild(row);
+		let extras = [];
+		try {
+			extras = row.dataset.extra ? JSON.parse(row.dataset.extra) : [];
+		} catch {
+			extras = [];
+		}
+		elements.extraList.innerHTML = '';
+		if (!extras || !extras.length) {
+			elements.extraWrapper.hidden = true;
+			return;
+		}
+		extras.forEach((extra) => {
+			if (!extra?.value) {
+				return;
+			}
+			const li = document.createElement('li');
+			li.innerHTML = `<strong>${sanitize(extra.label || extra.id || '')}</strong> : ${sanitize(extra.display || extra.value)}`;
+			elements.extraList.appendChild(li);
 		});
-	};
-
-	const updatePagination = (itemsCount, totalCount) => {
-		if (!elements.pagination || !elements.pageIndicator) {
-			return;
-		}
-
-		const total = typeof totalCount === 'number' ? totalCount : state.total;
-		const totalPages = total > 0 ? Math.ceil(total / state.perPage) : null;
-		const hasItems = total > 0 || itemsCount > 0;
-		const isFirst = state.page === 1;
-		const hasMore = totalPages ? state.page < totalPages : itemsCount === state.perPage;
-
-		elements.pagination.hidden = !hasItems;
-
-		if (elements.prev) {
-			elements.prev.disabled = isFirst;
-		}
-		if (elements.next) {
-			elements.next.disabled = !hasMore;
-		}
-
-		const pageLabel = getText('page', 'Page');
-		elements.pageIndicator.textContent = totalPages
-			? `${pageLabel} ${state.page} / ${totalPages}`
-			: `${pageLabel} ${state.page}`;
-	};
-
-	const collectFilters = () => ({
-		search: elements.search ? elements.search.value.trim() : '',
-		niveau: elements.level ? elements.level.value.trim() : '',
-		statut: elements.status ? elements.status.value.trim() : '',
-		per_page: state.perPage,
-		page: state.page,
-	});
-
-	const resetFilters = () => {
-		if (searchTimer) {
-			clearTimeout(searchTimer);
-			searchTimer = null;
-		}
-		if (elements.search) {
-			elements.search.value = '';
-		}
-		if (elements.level) {
-			elements.level.value = '';
-		}
-		if (elements.status) {
-			elements.status.value = '';
-		}
-		if (elements.perPage) {
-			elements.perPage.value = '10';
-		}
-		state.perPage = 10;
-		state.page = 1;
-		state.total = 0;
-		loadData();
-	};
-
-	const loadData = () => {
-		if (state.loading) {
-			return;
-		}
-
-		state.loading = true;
-		setDashboardStatus(getText('loading', 'Chargement…'), 'loading');
-		const filters = collectFilters();
-		state.lastQuery = filters;
-
-		restFetch(`/regs?${new URLSearchParams(filters).toString()}`)
-			.then((data) => {
-				const items = data.items || [];
-				state.total = typeof data.total === 'number' ? data.total : 0;
-
-				if (typeof data.limit === 'number' && data.limit !== state.perPage) {
-					state.perPage = data.limit;
-					if (elements.perPage) {
-						elements.perPage.value = String(data.limit);
-					}
-				}
-
-				if (typeof data.page === 'number') {
-					state.page = data.page;
-				}
-
-				renderTable(items);
-				updatePagination(items.length, state.total);
-				const message =
-					items.length === 0 && state.total === 0
-						? getText('empty', 'Aucun résultat.')
-						: getText('refreshed', 'Données mises à jour.');
-				setDashboardStatus(message, 'success', 2500);
-			})
-			.catch((error) => {
-				renderTable([]);
-				updatePagination(0, 0);
-				const message = error.message || getText('loginError', 'Mot de passe incorrect.');
-				setDashboardStatus(message, 'error');
-				showLoginError(message);
-				sessionStorage.removeItem('ibcToken');
-				state.token = '';
-				state.total = 0;
-				toggleLoginModal(true);
-			})
-			.finally(() => {
-				state.loading = false;
-			});
-	};
-
-	const showLoginError = (message) => {
-		if (!elements.loginFeedback) {
-			return;
-		}
-		elements.loginFeedback.hidden = false;
-		elements.loginFeedback.textContent = message;
-	};
-
-	const showEditFeedback = (message, type = 'error') => {
-		if (!elements.editFeedback) {
-			return;
-		}
-		elements.editFeedback.hidden = false;
-		elements.editFeedback.textContent = message;
-		elements.editFeedback.classList.toggle('ibc-modal-feedback-error', type === 'error');
-		elements.editFeedback.classList.toggle('ibc-modal-feedback-success', type === 'success');
-	};
-
-	const clearEditFeedback = () => {
-		if (elements.editFeedback) {
-			elements.editFeedback.hidden = true;
-			elements.editFeedback.textContent = '';
-			elements.editFeedback.className = 'ibc-modal-feedback';
-		}
+		elements.extraWrapper.hidden = false;
 	};
 
 	const openEditModal = (row) => {
 		if (!elements.editForm) {
 			return;
 		}
-
 		elements.editForm.reset();
-		clearEditFeedback();
-
 		elements.editForm.querySelector('[name="id"]').value = row.dataset.id || '';
-		elements.editForm.querySelector('#ibc_edit_prenom').value = row.dataset.prenom || '';
-		elements.editForm.querySelector('#ibc_edit_nom').value = row.dataset.nom || '';
-
-		elements.editForm.querySelector('#ibc_edit_email').value = row.dataset.email || '';
-		elements.editForm.querySelector('#ibc_edit_phone').value = row.dataset.phone || '';
-		elements.editForm.querySelector('#ibc_edit_status').value = row.dataset.status || 'Confirme';
-		const notesField = elements.editForm.querySelector('#ibc_edit_notes');
+		elements.editForm.querySelector('[name="prenom"]').value = row.dataset.prenom || '';
+		elements.editForm.querySelector('[name="nom"]').value = row.dataset.nom || '';
+		elements.editForm.querySelector('[name="email"]').value = row.dataset.email || '';
+		elements.editForm.querySelector('[name="telephone"]').value = row.dataset.phone || '';
+		elements.editForm.querySelector('[name="statut"]').value = row.dataset.status || 'Confirme';
+		const notesField = elements.editForm.querySelector('[name="message"]');
 		if (notesField) {
 			notesField.value = row.dataset.notes || '';
 		}
+		renderDocs(row);
+		renderExtras(row);
+		if (elements.editFeedback) {
+			elements.editFeedback.hidden = true;
+			elements.editFeedback.textContent = '';
+		}
+		toggleModal(elements.editModal, true);
+	};
 
-		const extraContainer = elements.extraPreview;
-		if (extraContainer) {
-			let extras = [];
-			try {
-				extras = row.dataset.extra ? JSON.parse(row.dataset.extra) : [];
-			} catch (error) {
-				extras = [];
-			}
-
-			if (extras && extras.length) {
-				extraContainer.hidden = false;
-				const list = extras
-					.filter((entry) => entry && entry.value)
-					.map((entry) => {
-						const label = (entry.label || entry.id || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-						let value = entry.display || entry.value;
-						if (entry.type === 'file' && entry.value) {
-							const safeUrl = encodeURI(entry.value);
-							value = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${IBCDashboard.texts.download || 'Télécharger'}</a>`;
-						} else {
-							value = (value || '')
-								.toString()
-								.replace(/&/g, '&amp;')
-								.replace(/</g, '&lt;')
-								.replace(/>/g, '&gt;');
-						}
-						return `<li><strong>${label}</strong> : ${value}</li>`;
-					})
-					.join('');
-
-				extraContainer.innerHTML = `
-					<h4>${IBCDashboard.texts.extraTitle || 'Informations complémentaires'}</h4>
-					<ul>${list}</ul>
-				`;
-			} else {
-				extraContainer.hidden = true;
-				extraContainer.innerHTML = '';
-			}
+	const renderTable = (items) => {
+		state.lastItems = items || [];
+		if (!elements.tableBody) {
+			return;
+		}
+		elements.tableBody.innerHTML = '';
+		if (!items || !items.length) {
+			const emptyRow = document.createElement('tr');
+			emptyRow.className = 'ibc-table-empty';
+			emptyRow.innerHTML = `<td colspan="14">${getText('empty', 'Aucune inscription trouvée.')}</td>`;
+			elements.tableBody.appendChild(emptyRow);
+			return;
 		}
 
-		const docsContainer = elements.docsPreview;
-		if (docsContainer) {
-			const rectoLink = elements.docRecto || docsContainer.querySelector('[data-ibc-doc="recto"]');
-			const versoLink = elements.docVerso || docsContainer.querySelector('[data-ibc-doc="verso"]');
-			const emptyBadge = elements.docEmpty || docsContainer.querySelector('[data-ibc-doc-empty]');
+		items.forEach((item) => {
+			const row = document.createElement('tr');
+			row.dataset.id = item.row || '';
+			row.dataset.ref = item.ref || '';
+			row.dataset.prenom = item.prenom || '';
+			row.dataset.nom = item.nom || '';
+			row.dataset.email = item.email || '';
+			row.dataset.phone = item.telephone || item.phone || '';
+			row.dataset.level = item.niveau || item.level || '';
+			row.dataset.status = item.statut || 'Confirme';
+			row.dataset.notes = item.message || '';
+			row.dataset.extra = JSON.stringify(item.extraFields || []);
+			row.dataset.cinRecto = item.cinRectoUrl || '';
+			row.dataset.cinVerso = item.cinVersoUrl || '';
+			row.dataset.timestamp = item.timestamp || item.createdAt || '';
+			row.dataset.birthdate = item.dateNaissance || '';
+			row.dataset.birthplace = item.lieuNaissance || '';
 
-			const hasRecto = Boolean(row.dataset.cinRecto);
-			const hasVerso = Boolean(row.dataset.cinVerso);
-			const hasDocs = hasRecto || hasVerso;
+			const docChip = (url, label) =>
+				url
+					? `<a class="ibc-doc-chip" href="${encodeURI(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+					: `<span class="ibc-doc-chip is-muted">${getText('docMissing', 'Aucun doc')}</span>`;
 
-			const rectoUrl = hasRecto ? encodeURI(row.dataset.cinRecto) : '#';
-			const versoUrl = hasVerso ? encodeURI(row.dataset.cinVerso) : '#';
+			row.innerHTML = `
+				<td>${sanitize(item.timestamp || '')}</td>
+				<td>${sanitize(item.prenom || '')}</td>
+				<td>${sanitize(item.nom || '')}</td>
+				<td>${sanitize(item.dateNaissance || '')}</td>
+				<td>${sanitize(item.lieuNaissance || '')}</td>
+				<td>${item.email ? `<a href="mailto:${sanitize(item.email)}">${sanitize(item.email)}</a>` : '—'}</td>
+				<td>${item.telephone ? `<a href="tel:${sanitize(item.telephone.replace(/\s+/g, ''))}">${sanitize(item.telephone)}</a>` : '—'}</td>
+				<td>${sanitize(item.niveau || '')}</td>
+				<td><div class="ibc-doc-chip-group">${docChip(item.cinRectoUrl, getText('docRecto', 'Recto'))}</div></td>
+				<td><div class="ibc-doc-chip-group">${docChip(item.cinVersoUrl, getText('docVerso', 'Verso'))}</div></td>
+				<td>${item.message ? `<span class="ibc-message-chip">${sanitize(item.message)}</span>` : '<span class="ibc-message-chip is-empty">—</span>'}</td>
+				<td><button type="button" class="ibc-ref-link" data-action="details">${sanitize(item.ref || '')}</button></td>
+				<td>
+					<select class="ibc-status-select" data-action="status">
+						<option value="Confirme"${item.statut === 'Confirme' ? ' selected' : ''}>${getText('statusConfirm', 'Confirmé')}</option>
+						<option value="Annule"${item.statut === 'Annule' ? ' selected' : ''}>${getText('statusCancel', 'Annulé')}</option>
+					</select>
+				</td>
+				<td>
+					<div class="ibc-row-actions">
+						<button type="button" class="ibc-button-primary" data-action="save">${getText('save', 'Sauver')}</button>
+						<button type="button" class="ibc-button-danger" data-action="delete">${getText('delete', 'Supprimer')}</button>
+					</div>
+				</td>
+			`;
+			elements.tableBody.appendChild(row);
+		});
+	};
 
-			docsContainer.hidden = !hasDocs && !emptyBadge;
-
-			if (rectoLink) {
-				rectoLink.href = rectoUrl;
-				rectoLink.hidden = !hasRecto;
-			}
-
-			if (versoLink) {
-				versoLink.href = versoUrl;
-				versoLink.hidden = !hasVerso;
-			}
-
-			if (emptyBadge) {
-				emptyBadge.hidden = hasDocs;
-			}
-
-			docsContainer.classList.toggle('is-empty', !hasDocs);
+	const updatePagination = () => {
+		const pageLabel = getText('page', 'Page');
+		const totalPages = state.total > 0 ? Math.ceil(state.total / state.perPage) : state.page;
+		if (elements.pageIndicator) {
+			elements.pageIndicator.textContent = `${pageLabel} ${state.page} / ${totalPages || state.page}`;
 		}
+		if (elements.prev) {
+			elements.prev.disabled = state.page <= 1;
+		}
+		if (elements.next) {
+			const hasMore = totalPages ? state.page >= totalPages : state.lastItems.length < state.perPage;
+			elements.next.disabled = hasMore;
+		}
+	};
 
-		toggleEditModal(true);
+	const buildQuery = () => {
+		const params = new URLSearchParams();
+		if (state.filters.search) {
+			params.set('search', state.filters.search);
+		}
+		if (state.filters.niveau) {
+			params.set('niveau', state.filters.niveau);
+		}
+		if (state.filters.statut) {
+			params.set('statut', state.filters.statut);
+		}
+		params.set('page', String(state.page));
+		params.set('per_page', String(state.perPage));
+		return params.toString();
+	};
+
+	const loadData = () => {
+		if (state.loading) {
+			return;
+		}
+		state.loading = true;
+		setStatus(getText('loading', 'Chargement…'), 'loading');
+		apiFetch(`/registrations?${buildQuery()}`, { method: 'GET' })
+			.then((data) => {
+				state.total = data.total || 0;
+				state.page = data.page || state.page;
+				state.perPage = data.limit || state.perPage;
+				renderTable(data.items || []);
+				updatePagination();
+				setStatus(getText('refreshed', 'Données mises à jour.'), 'success', 2000);
+			})
+			.catch((error) => {
+				renderTable([]);
+				updatePagination();
+				setStatus(error.message || getText('loginError', 'Mot de passe invalide.'), 'error', 4000);
+				state.token = '';
+				sessionStorage.removeItem(TOKEN_KEY);
+				showLogin(error.message);
+			})
+			.finally(() => {
+				state.loading = false;
+			});
 	};
 
 	const submitLogin = () => {
-		const password = elements.loginPassword.value;
+		const password = elements.loginPassword?.value.trim();
 		if (!password) {
-			showLoginError(IBCDashboard.texts.loginError);
+			showLogin(getText('loginError', 'Mot de passe requis.'));
 			return;
 		}
-
-		elements.loginFeedback.hidden = true;
-
-		restFetch('/login', {
+		setStatus(getText('loading', 'Chargement…'), 'loading');
+		apiFetch('/login', {
 			method: 'POST',
-			body: new URLSearchParams({ password }),
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-			},
+			body: JSON.stringify({ password }),
 		})
 			.then((data) => {
 				state.token = data.token;
-				sessionStorage.setItem('ibcToken', data.token);
-				toggleLoginModal(false);
+				sessionStorage.setItem(TOKEN_KEY, data.token);
+				hideLogin();
+				setStatus(getText('ready', 'Prêt'), 'success', 1500);
 				loadData();
 			})
 			.catch((error) => {
-				const message = error.message || getText('loginError', 'Mot de passe incorrect.');
-				showLoginError(message);
-				setDashboardStatus(message, 'error', 4000);
+				showLogin(error.message || getText('loginError', 'Accès refusé.'));
+				setStatus(error.message || getText('loginError', 'Accès refusé.'), 'error', 3000);
 			});
 	};
 
-	const submitEdit = (event) => {
-		event.preventDefault();
-		clearEditFeedback();
-
-		const formData = new FormData(elements.editForm);
-		const id = formData.get('id');
-		if (!id) {
-			showEditFeedback('ID manquant.');
-			return;
-		}
-
-		const fields = {};
-		formData.forEach((value, key) => {
-			if (key !== 'id' && value !== '') {
-				fields[key] = value;
-			}
-		});
-
-		restFetch('/reg/update', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				id,
-				fields,
-			}),
-		})
-			.then(() => {
-				const feedbackMessage = getText('saveSuccess', 'Inscription mise à jour.');
-				showEditFeedback(feedbackMessage, 'success');
-				setDashboardStatus(feedbackMessage, 'success', 2500);
-				loadData();
-				setTimeout(() => toggleEditModal(false), 800);
-			})
-			.catch((error) => {
-				showEditFeedback(error.message || IBCDashboard.texts.loginError);
-			});
-	};
-
-	const quickSave = (row) => {
+	const saveRowStatus = (row) => {
 		const id = row.dataset.id;
-		const statusSelect = row.querySelector('[data-ibc-status]');
-
-		if (!id || !statusSelect) {
-			setDashboardStatus(getText('saveError', 'Impossible d’enregistrer les modifications.'), 'error', 3000);
+		const select = row.querySelector('[data-action="status"]');
+		if (!id || !select) {
 			return;
 		}
-
-		const statut = statusSelect.value || 'Confirme';
-		setDashboardStatus(getText('saving', 'Enregistrement…'), 'loading');
-
-		restFetch('/reg/update', {
+		setStatus(getText('saving', 'Enregistrement…'), 'loading');
+		apiFetch(`/registrations/${encodeURIComponent(id)}`, {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
 			body: JSON.stringify({
-				id,
-				fields: { statut },
+				fields: {
+					statut: select.value,
+				},
 			}),
 		})
 			.then(() => {
-				setDashboardStatus(getText('saveStatus', 'Statut mis à jour.'), 'success', 2500);
-				row.dataset.status = statut;
+				setStatus(getText('saveSuccess', 'Inscription mise à jour.'), 'success', 2000);
 				loadData();
 			})
 			.catch((error) => {
-				setDashboardStatus(error.message || getText('saveError', 'Impossible d’enregistrer les modifications.'), 'error', 4000);
+				setStatus(error.message || getText('saveError', 'Impossible d’enregistrer.'), 'error', 3000);
 			});
 	};
 
@@ -644,285 +404,221 @@
 		if (!reference) {
 			return;
 		}
-		if (!window.confirm(getText('deleteConfirm', 'Confirmer l’annulation de cette inscription ?'))) {
+		const confirmText = getText('deleteConfirm', 'Confirmer l’annulation ?');
+		if (!window.confirm(confirmText)) {
 			return;
 		}
-
-		setDashboardStatus(getText('deleting', 'Suppression en cours…'), 'loading');
-
-		restFetch('/reg/delete', {
+		setStatus(getText('deleting', 'Suppression…'), 'loading');
+		apiFetch(`/registrations/${encodeURIComponent(reference)}/cancel`, {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ ref: reference }),
 		})
 			.then(() => {
-				setDashboardStatus(getText('deleteDone', 'Inscription annulée.'), 'success', 2500);
+				setStatus(getText('deleteDone', 'Inscription annulée.'), 'success', 2000);
 				loadData();
 			})
 			.catch((error) => {
-				setDashboardStatus(error.message || getText('deleteError', 'Impossible de supprimer l’inscription.'), 'error', 4000);
+				setStatus(error.message || getText('deleteError', 'Impossible de supprimer.'), 'error', 3000);
+			});
+	};
+
+	const submitEdit = (event) => {
+		event.preventDefault();
+		if (!elements.editForm) {
+			return;
+		}
+		const id = elements.editForm.querySelector('[name="id"]').value;
+		if (!id) {
+			return;
+		}
+		const formData = new FormData(elements.editForm);
+		const fields = {};
+		formData.forEach((value, key) => {
+			if (key !== 'id' && value !== '') {
+				fields[key] = value;
+			}
+		});
+		apiFetch(`/registrations/${encodeURIComponent(id)}`, {
+			method: 'POST',
+			body: JSON.stringify({ fields }),
+		})
+			.then(() => {
+				elements.editFeedback.hidden = false;
+				elements.editFeedback.textContent = getText('saveSuccess', 'Inscription mise à jour.');
+				elements.editFeedback.classList.add('ibc-modal-feedback-success');
+				setTimeout(() => {
+					toggleModal(elements.editModal, false);
+					loadData();
+				}, 800);
+			})
+			.catch((error) => {
+				elements.editFeedback.hidden = false;
+				elements.editFeedback.textContent = error.message || getText('saveError', 'Impossible d’enregistrer.');
+				elements.editFeedback.classList.remove('ibc-modal-feedback-success');
 			});
 	};
 
 	const exportCsv = () => {
-		const rows = elements.tableBody ? elements.tableBody.querySelectorAll('tr') : [];
-		if (!rows.length || rows[0].classList.contains('ibc-table-empty')) {
+		if (!state.lastItems.length) {
 			return;
 		}
-
 		const headers = [
-			'Date d\'inscription',
-			'Prénom',
+			'Timestamp',
+			'Prenom',
 			'Nom',
-			'Date de naissance',
-			'Lieu de naissance',
+			'DateNaissance',
+			'LieuNaissance',
 			'Email',
-			'Téléphone',
+			'Telephone',
 			'Niveau',
 			'CIN Recto',
 			'CIN Verso',
 			'Message',
-			'Référence',
+			'Reference',
 			'Statut',
 		];
-		const lines = [headers.map((header) => sanitizeCsvValue(header)).join(',')];
-
-		rows.forEach((row) => {
-			if (row.classList.contains('ibc-table-empty')) {
-				return;
-			}
-
-			const ref = row.dataset.ref || '';
-			const prenom = row.dataset.prenom || '';
-			const nom = row.dataset.nom || '';
-			const birthdate = row.dataset.birthdate || '';
-			const birthPlace = row.dataset.birthplace || '';
-			const email = row.dataset.email || '';
-			const phone = row.dataset.phone || '';
-			const level = row.dataset.level || '';
-			const recto = row.dataset.cinRecto || '';
-			const verso = row.dataset.cinVerso || '';
-			const message = (row.dataset.notes || '').replace(/\s+/g, ' ').trim();
-			const statusSelect = row.querySelector('[data-ibc-status]');
-			const statut = statusSelect ? statusSelect.value : row.dataset.status || '';
-			const timestamp = formatDateTime(row.dataset.timestamp || '');
-			const birthFormatted = formatDate(birthdate);
-
-			lines.push(
-				[
-					timestamp,
-					prenom,
-					nom,
-					birthFormatted,
-					birthPlace,
-					email,
-					phone,
-					level,
-					recto,
-					verso,
-					message,
-					ref,
-					statut,
-				]
-					.map((value) => sanitizeCsvValue(value))
-					.join(',')
-			);
+		const lines = [headers.join(',')];
+		state.lastItems.forEach((item) => {
+			const row = [
+				item.timestamp || '',
+				item.prenom || '',
+				item.nom || '',
+				item.dateNaissance || '',
+				item.lieuNaissance || '',
+				item.email || '',
+				item.telephone || '',
+				item.niveau || '',
+				item.cinRectoUrl || '',
+				item.cinVersoUrl || '',
+				(item.message || '').replace(/\s+/g, ' '),
+				item.ref || '',
+				item.statut || '',
+			].map((value) => `"${(value || '').replace(/"/g, '""')}"`);
+			lines.push(row.join(','));
 		});
-
 		const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
 		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = `ibc-registrations-${new Date().toISOString().slice(0, 10)}.csv`;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `ibc-enrollments-${new Date().toISOString().slice(0, 10)}.csv`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
-		setDashboardStatus(getText('exported', 'Export CSV généré.'), 'success', 2500);
-	};
-
-	const logout = () => {
-		sessionStorage.removeItem('ibcToken');
-		state.token = '';
-		state.page = 1;
-		state.perPage = 10;
-		state.total = 0;
-		state.lastQuery = {};
-		if (elements.loginPassword) {
-			elements.loginPassword.value = '';
-		}
-		if (elements.search) {
-			elements.search.value = '';
-		}
-		if (elements.level) {
-			elements.level.value = '';
-		}
-		if (elements.status) {
-			elements.status.value = '';
-		}
-		if (elements.loginFeedback) {
-			elements.loginFeedback.hidden = true;
-			elements.loginFeedback.textContent = '';
-			elements.loginFeedback.className = 'ibc-modal-feedback';
-		}
-		if (elements.perPage) {
-			elements.perPage.value = '10';
-		}
-		renderTable([]);
-		updatePagination(0, 0);
-		setDashboardStatus(getText('logoutDone', 'Déconnexion effectuée.'), 'success', 3000);
-		toggleLoginModal(true);
+		setStatus(getText('exported', 'Export CSV généré.'), 'success', 2000);
 	};
 
 	/* Event bindings */
-	if (elements.loginButton) {
-		elements.loginButton.addEventListener('click', submitLogin);
-	}
-
-	if (elements.loginPassword) {
-		elements.loginPassword.addEventListener('keydown', (event) => {
-			if (event.key === 'Enter') {
-				event.preventDefault();
-				submitLogin();
-			}
-		});
-	}
-
-	if (elements.refresh) {
-		elements.refresh.addEventListener('click', () => {
-			state.page = 1;
-			loadData();
-		});
-	}
-
-	if (elements.reset) {
-		elements.reset.addEventListener('click', () => {
-			resetFilters();
-		});
-	}
-
-	if (elements.export) {
-		elements.export.addEventListener('click', exportCsv);
-	}
-
-	if (elements.logout) {
-		elements.logout.addEventListener('click', logout);
-	}
-
-	if (elements.prev) {
-		elements.prev.addEventListener('click', () => {
-			if (state.page > 1) {
-				state.page -= 1;
-				loadData();
-			}
-		});
-	}
-
-	if (elements.next) {
-		elements.next.addEventListener('click', () => {
-			state.page += 1;
-			loadData();
-		});
-	}
-
-	if (elements.search) {
-		elements.search.addEventListener('input', () => {
-			if (searchTimer) {
-				clearTimeout(searchTimer);
-			}
-			searchTimer = setTimeout(() => {
-				state.page = 1;
-				const value = elements.search.value.trim();
-				if (value.length > 0 && value.length < 2) {
-					return;
-				}
-				loadData();
-			}, 350);
-		});
-
-		elements.search.addEventListener('keydown', (event) => {
-			if (event.key === 'Enter') {
-				event.preventDefault();
-				if (searchTimer) {
-					clearTimeout(searchTimer);
-				}
-				state.page = 1;
-				loadData();
-			}
-		});
-	}
-
-	if (elements.level) {
-		elements.level.addEventListener('change', () => {
-			state.page = 1;
-			loadData();
-		});
-	}
-
-	if (elements.status) {
-		elements.status.addEventListener('change', () => {
-			state.page = 1;
-			loadData();
-		});
-	}
-
-	if (elements.perPage) {
-		elements.perPage.addEventListener('change', () => {
-			state.perPage = parseInt(elements.perPage.value, 10) || 10;
-			state.page = 1;
-			loadData();
-		});
-	}
-
-	if (elements.tableBody) {
-		elements.tableBody.addEventListener('click', (event) => {
-			const action = event.target.closest('[data-ibc-action]');
-			if (!action) {
-				return;
-			}
-			const row = event.target.closest('tr');
-			if (!row) {
-				return;
-			}
-
-			const actionType = action.dataset.ibcAction;
-			if (actionType === 'details') {
+	root.addEventListener('click', (event) => {
+		const action = event.target.closest('[data-action]');
+		if (!action) {
+			return;
+		}
+		const row = event.target.closest('tr');
+		if (!row) {
+			return;
+		}
+		switch (action.dataset.action) {
+			case 'details':
 				openEditModal(row);
-				return;
-			}
-			if (actionType === 'save') {
-				quickSave(row);
-				return;
-			}
-			if (actionType === 'delete') {
+				break;
+			case 'save':
+				saveRowStatus(row);
+				break;
+			case 'delete':
 				deleteRow(row);
-			}
-		});
-	}
+				break;
+			default:
+		}
+	});
 
-	if (elements.editForm) {
-		elements.editForm.addEventListener('submit', submitEdit);
-	}
+	elements.prev?.addEventListener('click', () => {
+		if (state.page > 1) {
+			state.page -= 1;
+			loadData();
+		}
+	});
 
-	if (elements.editCancel) {
-		elements.editCancel.addEventListener('click', () => toggleEditModal(false));
-	}
+	elements.next?.addEventListener('click', () => {
+		state.page += 1;
+		loadData();
+	});
 
-	if (elements.editModal) {
-		elements.editModal.addEventListener('click', (event) => {
-			if (event.target === elements.editModal) {
-				toggleEditModal(false);
-			}
-		});
-	}
+	elements.perPage?.addEventListener('change', () => {
+		state.perPage = parseInt(elements.perPage.value, 10) || 10;
+		state.page = 1;
+		loadData();
+	});
 
-	setDashboardStatus(state.token ? getText('ready', 'Prêt') : getText('loginRequired', 'Connexion requise.'), 'ready');
+	const handleSearchChange = () => {
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+		}
+		searchTimer = setTimeout(() => {
+			state.filters.search = elements.search?.value.trim() || '';
+			state.page = 1;
+			loadData();
+		}, 300);
+	};
+
+	elements.search?.addEventListener('input', handleSearchChange);
+	elements.level?.addEventListener('change', () => {
+		state.filters.niveau = elements.level.value;
+		state.page = 1;
+		loadData();
+	});
+
+	elements.statut?.addEventListener('change', () => {
+		state.filters.statut = elements.statut.value;
+		state.page = 1;
+		loadData();
+	});
+
+	elements.refresh?.addEventListener('click', () => loadData());
+
+	elements.reset?.addEventListener('click', () => {
+		state.filters = { search: '', niveau: '', statut: '' };
+		state.page = 1;
+		elements.search.value = '';
+		elements.level.value = '';
+		elements.statut.value = '';
+		loadData();
+	});
+
+	elements.exportBtn?.addEventListener('click', exportCsv);
+
+	elements.logout?.addEventListener('click', () => {
+		state.token = '';
+		sessionStorage.removeItem(TOKEN_KEY);
+		setStatus(getText('logoutDone', 'Déconnexion effectuée.'), 'success', 2000);
+		showLogin();
+	});
+
+	elements.loginSubmit?.addEventListener('click', submitLogin);
+	elements.loginPassword?.addEventListener('keydown', (event) => {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			submitLogin();
+		}
+	});
+
+	elements.loginModal?.addEventListener('click', (event) => {
+		if (event.target === elements.loginModal) {
+			toggleModal(elements.loginModal, false);
+		}
+	});
+
+	elements.editCancel?.addEventListener('click', () => toggleModal(elements.editModal, false));
+	elements.editForm?.addEventListener('submit', submitEdit);
+	elements.editModal?.addEventListener('click', (event) => {
+		if (event.target === elements.editModal) {
+			toggleModal(elements.editModal, false);
+		}
+	});
 
 	if (state.token) {
+		setStatus(getText('ready', 'Prêt'), 'success', 1500);
 		loadData();
 	} else {
-		toggleLoginModal(true);
+		showLogin();
 	}
 })();
