@@ -390,6 +390,7 @@
 			row.dataset.nom = item.nom || '';
 			row.dataset.email = item.email || '';
 			row.dataset.phone = item.phone || '';
+			row.dataset.telephone = item.telephone || item.phone || '';
 			row.dataset.level = item.level || '';
 			row.dataset.status = item.statut || '';
 			row.dataset.cinRecto = item.cinRectoUrl || '';
@@ -430,7 +431,11 @@
 				<td data-label="${columnLabels.birthDate}">${formatDate(item.dateNaissance)}</td>
 				<td data-label="${columnLabels.birthPlace}">${displayOrDash(item.lieuNaissance)}</td>
 				<td data-label="${columnLabels.email}">${item.email ? `<a href="mailto:${encodeURIComponent(item.email)}">${escapeHtml(item.email)}</a>` : '—'}</td>
-				<td data-label="${columnLabels.phone}">${item.phone ? `<a href="tel:${cleanPhoneHref(item.phone)}">${escapeHtml(item.phone)}</a>` : '—'}</td>
+				<td data-label="${columnLabels.phone}">${
+					item.telephone || item.phone
+						? `<a href="tel:${cleanPhoneHref(item.telephone || item.phone)}">${escapeHtml(item.telephone || item.phone)}</a>`
+						: '—'
+				}</td>
 				<td data-label="${columnLabels.level}">${displayOrDash(item.level)}</td>
 				<td data-label="${columnLabels.cinRecto}"><div class="ibc-doc-chip-group">${rectoChip}</div></td>
 				<td data-label="${columnLabels.cinVerso}"><div class="ibc-doc-chip-group">${versoChip}</div></td>
@@ -606,7 +611,7 @@
 		elements.editForm.querySelector('#ibc_edit_nom').value = row.dataset.nom || '';
 
 		elements.editForm.querySelector('#ibc_edit_email').value = row.dataset.email || '';
-		elements.editForm.querySelector('#ibc_edit_phone').value = row.dataset.phone || '';
+		elements.editForm.querySelector('#ibc_edit_phone').value = row.dataset.telephone || row.dataset.phone || '';
 		elements.editForm.querySelector('#ibc_edit_status').value = row.dataset.status || 'Confirme';
 		const notesField = elements.editForm.querySelector('#ibc_edit_notes');
 		if (notesField) {
@@ -851,7 +856,7 @@
 			const birthdate = row.dataset.birthdate || '';
 			const birthPlace = row.dataset.birthplace || '';
 			const email = row.dataset.email || '';
-			const phone = row.dataset.phone || '';
+			const phone = row.dataset.telephone || row.dataset.phone || '';
 			const level = row.dataset.level || '';
 			const recto = row.dataset.cinRecto || '';
 			const verso = row.dataset.cinVerso || '';

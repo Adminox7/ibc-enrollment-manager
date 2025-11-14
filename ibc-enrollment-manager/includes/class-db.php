@@ -2,10 +2,10 @@
 /**
  * Database layer.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 use wpdb;
 
@@ -84,23 +84,24 @@ class DB {
 		$sql = "CREATE TABLE {$this->table} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			created_at DATETIME NOT NULL,
-			ref VARCHAR(40) NOT NULL UNIQUE,
-			prenom VARCHAR(120) DEFAULT '',
-			nom VARCHAR(120) DEFAULT '',
-			full_name VARCHAR(240) DEFAULT '',
-			birth_date VARCHAR(20) DEFAULT '',
-			birth_place VARCHAR(160) DEFAULT '',
-			email VARCHAR(190) DEFAULT '',
-			phone VARCHAR(60) DEFAULT '',
-			niveau VARCHAR(10) DEFAULT '',
-			message TEXT NULL,
-			cin_recto_url TEXT NULL,
-			cin_verso_url TEXT NULL,
+			updated_at DATETIME NOT NULL,
+			prenom VARCHAR(120) NOT NULL,
+			nom VARCHAR(120) NOT NULL,
+			date_naissance DATE NULL,
+			lieu_naissance VARCHAR(160) NULL,
+			email VARCHAR(190) NOT NULL,
+			telephone VARCHAR(60) NOT NULL,
+			niveau VARCHAR(10) NOT NULL,
+			cin_recto_url VARCHAR(255) NULL,
+			cin_verso_url VARCHAR(255) NULL,
+			message LONGTEXT NULL,
+			reference VARCHAR(40) NOT NULL,
 			statut VARCHAR(30) NOT NULL DEFAULT 'Confirme',
 			PRIMARY KEY  (id),
-			INDEX idx_email (email),
-			INDEX idx_phone (phone),
-			INDEX idx_statut (statut)
+			UNIQUE KEY reference_unique (reference),
+			KEY email_idx (email),
+			KEY telephone_idx (telephone),
+			KEY statut_idx (statut)
 		) {$charset_collate};";
 
 		dbDelta( $sql );
@@ -123,26 +124,23 @@ class DB {
 	 * @return int Insert ID.
 	 */
 	public function insert( array $data ): int {
-		$this->wpdb->insert(
-			$this->table,
-			$data,
-			array(
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-			)
-		);
+		if ( empty( $data ) ) {
+			return 0;
+		}
+
+		$formats = array();
+
+		foreach ( $data as $value ) {
+			if ( is_int( $value ) ) {
+				$formats[] = '%d';
+			} elseif ( is_float( $value ) ) {
+				$formats[] = '%f';
+			} else {
+				$formats[] = '%s';
+			}
+		}
+
+		$this->wpdb->insert( $this->table, $data, $formats );
 
 		return (int) $this->wpdb->insert_id;
 	}
@@ -162,7 +160,13 @@ class DB {
 
 		$formats = array();
 		foreach ( $data as $value ) {
-			$formats[] = is_numeric( $value ) ? '%s' : '%s';
+			if ( is_int( $value ) ) {
+				$formats[] = '%d';
+			} elseif ( is_float( $value ) ) {
+				$formats[] = '%f';
+			} else {
+				$formats[] = '%s';
+			}
 		}
 
 		$updated = $this->wpdb->update(
@@ -203,7 +207,7 @@ class DB {
 	 */
 	public function get_by_ref( string $reference ): ?array {
 		$sql = $this->wpdb->prepare(
-			"SELECT * FROM {$this->table} WHERE ref = %s",
+			"SELECT * FROM {$this->table} WHERE reference = %s",
 			$reference
 		);
 
@@ -239,7 +243,7 @@ class DB {
 	 */
 	public function get_by_phone( string $phone ): ?array {
 		$sql = $this->wpdb->prepare(
-			"SELECT * FROM {$this->table} WHERE phone = %s LIMIT 1",
+			"SELECT * FROM {$this->table} WHERE telephone = %s LIMIT 1",
 			$phone
 		);
 
@@ -282,7 +286,7 @@ class DB {
 
 		if ( ! empty( $args['search'] ) ) {
 			$like     = '%' . $this->wpdb->esc_like( $args['search'] ) . '%';
-			$where[]  = '(prenom LIKE %s OR nom LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR ref LIKE %s)';
+			$where[]  = '(prenom LIKE %s OR nom LIKE %s OR CONCAT_WS(" ", prenom, nom) LIKE %s OR email LIKE %s OR telephone LIKE %s OR reference LIKE %s)';
 			$params[] = $like;
 			$params[] = $like;
 			$params[] = $like;
@@ -341,7 +345,7 @@ class DB {
 
 		if ( ! empty( $args['search'] ) ) {
 			$like     = '%' . $this->wpdb->esc_like( $args['search'] ) . '%';
-			$where[]  = '(prenom LIKE %s OR nom LIKE %s OR full_name LIKE %s OR email LIKE %s OR phone LIKE %s OR ref LIKE %s)';
+			$where[]  = '(prenom LIKE %s OR nom LIKE %s OR CONCAT_WS(" ", prenom, nom) LIKE %s OR email LIKE %s OR telephone LIKE %s OR reference LIKE %s)';
 			$params[] = $like;
 			$params[] = $like;
 			$params[] = $like;
@@ -384,7 +388,7 @@ class DB {
 		$updated = $this->wpdb->update(
 			$this->table,
 			array( 'statut' => 'Annule' ),
-			array( 'ref' => $reference ),
+			array( 'reference' => $reference ),
 			array( '%s' ),
 			array( '%s' )
 		);

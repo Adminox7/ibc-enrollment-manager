@@ -2,12 +2,12 @@
 /**
  * Settings page.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
-use IBC\FormBuilder;
+use IBC\Enrollment\FormBuilder;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -281,6 +281,13 @@ class Settings {
 		?>
 		<table class="form-table" role="presentation">
 			<tr>
+				<th><label for="ibc_brand_name"><?php esc_html_e( 'Nom de la marque', 'ibc-enrollment-manager' ); ?></label></th>
+				<td>
+					<input type="text" id="ibc_brand_name" name="ibc_brand_name" value="<?php echo esc_attr( ibc_get_brand_name() ); ?>" class="regular-text" autocomplete="organization">
+					<p class="description"><?php esc_html_e( 'Ce nom est utilisé dans les reçus PDF, les e-mails et le tableau de bord.', 'ibc-enrollment-manager' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th><label for="ibc_brand_primary"><?php esc_html_e( 'Couleur principale', 'ibc-enrollment-manager' ); ?></label></th>
 				<td><input type="color" id="ibc_brand_primary" name="ibc_brand_primary" value="<?php echo esc_attr( $colors['primary'] ); ?>"></td>
 			</tr>
@@ -479,7 +486,7 @@ class Settings {
 		$last_token  = (string) get_option( 'ibc_last_token_issued', '' );
 		$active      = get_option( 'ibc_active_tokens', array() );
 		$active_count = is_array( $active ) ? count( $active ) : 0;
-		\IBC\Admin\Admin_Page::heading(
+		\IBC\Enrollment\Admin\Admin_Page::heading(
 			__( 'Sécurité API', 'ibc-enrollment-manager' ),
 			__( 'Définissez le mot de passe opérateur et surveillez les jetons actifs utilisés par le tableau de bord.', 'ibc-enrollment-manager' )
 		);
@@ -501,7 +508,7 @@ class Settings {
 			</tr>
 		</table>
 		<?php
-		\IBC\Admin\Admin_Page::definition_list(
+		\IBC\Enrollment\Admin\Admin_Page::definition_list(
 			array(
 				__( 'En-tête HTTP requis', 'ibc-enrollment-manager' ) => 'X-IBC-Token',
 				__( 'Paramètre alternatif', 'ibc-enrollment-manager' ) => 'token',
@@ -530,6 +537,11 @@ class Settings {
 	 * @return void
 	 */
 	private function save_branding_tab(): void {
+		if ( isset( $_POST['ibc_brand_name'] ) ) {
+			$name = sanitize_text_field( wp_unslash( $_POST['ibc_brand_name'] ) );
+			update_option( 'ibc_brand_name', $name );
+		}
+
 		$keys = array(
 			'ibc_brand_primary',
 			'ibc_brand_secondary',

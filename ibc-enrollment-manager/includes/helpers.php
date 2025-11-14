@@ -2,7 +2,7 @@
 /**
  * Helper functions for IBC Enrollment Manager.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -36,6 +36,22 @@ function ibc_update_option( string $key, $value ): void {
 }
 
 /**
+ * Retrieve configured brand name or blog name fallback.
+ *
+ * @return string
+ */
+function ibc_get_brand_name(): string {
+	$name = (string) get_option( 'ibc_brand_name', '' );
+	$name = trim( wp_strip_all_tags( $name ) );
+
+	if ( '' !== $name ) {
+		return $name;
+	}
+
+	return get_bloginfo( 'name' );
+}
+
+/**
  * Retrieve capacity limit option.
  *
  * @return int
@@ -60,17 +76,17 @@ function ibc_get_price_prep(): int {
  */
 function ibc_get_brand_colors(): array {
 	$defaults = array(
-		'primary'      => '#e94162',
-		'secondary'    => '#0f172a',
-		'text'         => '#1f2937',
-		'muted'        => '#f8fafc',
-		'border'       => '#e2e8f0',
-		'button'       => '#e94162',
-		'button_text'  => '#ffffff',
-		'success_bg'   => '#dcfce7',
+		'primary'      => '#4CB4B4',
+		'secondary'    => '#2A8E8E',
+		'text'         => '#1F2937',
+		'muted'        => '#E0F5F5',
+		'border'       => '#E5E7EB',
+		'button'       => '#4CB4B4',
+		'button_text'  => '#FFFFFF',
+		'success_bg'   => '#DCFCE7',
 		'success_text' => '#166534',
-		'error_bg'     => '#fee2e2',
-		'error_text'   => '#991b1b',
+		'error_bg'     => '#FEE2E2',
+		'error_text'   => '#B91C1C',
 	);
 
 	$keys = array_keys( $defaults );
@@ -228,10 +244,43 @@ function ibc_normalize_phone( string $phone ): string {
  * @return string
  */
 function ibc_generate_reference(): string {
-	$date  = wp_date( 'Ymd' );
-	$token = strtoupper( substr( wp_generate_password( 8, false, false ), 0, 4 ) );
+	$date     = wp_date( 'Ymd' );
+	$sequence = wp_rand( 0, 9999 );
 
-	return sprintf( 'IBC-%s-%s', $date, $token );
+	return sprintf( 'IBC-%s-%04d', $date, $sequence );
+}
+
+/**
+ * Format a date string into a human-friendly representation.
+ *
+ * @param string|\DateTimeInterface|null $date   Date value.
+ * @param string                         $format Output format.
+ *
+ * @return string
+ */
+function ibc_format_date_human( $date, string $format = 'd/m/Y' ): string {
+	if ( $date instanceof \DateTimeInterface ) {
+		$timestamp = $date->getTimestamp();
+	} else {
+		$raw = trim( (string) ( $date ?? '' ) );
+
+		if ( '' === $raw ) {
+			return '';
+		}
+
+		if ( preg_match( '/^\d{2}\/\d{2}\/\d{4}$/', $raw ) ) {
+			$parts = explode( '/', $raw );
+			$raw   = sprintf( '%04d-%02d-%02d', (int) $parts[2], (int) $parts[1], (int) $parts[0] );
+		}
+
+		$timestamp = strtotime( $raw );
+	}
+
+	if ( false === $timestamp ) {
+		return (string) ( $date ?? '' );
+	}
+
+	return wp_date( $format, $timestamp );
 }
 
 /**

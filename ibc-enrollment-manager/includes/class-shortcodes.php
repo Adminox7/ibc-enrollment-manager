@@ -2,12 +2,12 @@
 /**
  * Shortcodes renderer.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
-use IBC\FormBuilder;
+use IBC\Enrollment\FormBuilder;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -70,12 +70,13 @@ class Shortcodes {
 	 * @return string
 	 */
 	public function render_register( array $atts ): string {
-		$schema  = $this->form_builder->get_active_schema();
-		$schema  = ! empty( $schema ) ? $schema : $this->form_builder->get_default_schema();
-		$colors  = ibc_get_brand_colors_with_legacy();
-		$atts = shortcode_atts(
+		$schema        = $this->form_builder->get_active_schema();
+		$schema        = ! empty( $schema ) ? $schema : $this->form_builder->get_default_schema();
+		$colors        = ibc_get_brand_colors_with_legacy();
+		$default_title = sprintf( __( 'Préinscription %s', 'ibc-enrollment-manager' ), ibc_get_brand_name() );
+		$atts          = shortcode_atts(
 			array(
-				'title' => __( 'Préinscription IBC', 'ibc-enrollment-manager' ),
+				'title' => $default_title,
 			),
 			$atts
 		);
@@ -366,7 +367,7 @@ class Shortcodes {
 					</div>
 					<div class="ibc-form-group">
 						<label for="ibc_edit_phone"><?php esc_html_e( 'Téléphone', 'ibc-enrollment-manager' ); ?></label>
-						<input type="text" id="ibc_edit_phone" name="phone" class="ibc-input">
+						<input type="text" id="ibc_edit_phone" name="telephone" class="ibc-input">
 					</div>
 					<div class="ibc-form-group">
 						<label for="ibc_edit_status"><?php esc_html_e( 'Statut', 'ibc-enrollment-manager' ); ?></label>

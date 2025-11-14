@@ -10,7 +10,7 @@
  * Text Domain:       ibc-enrollment-manager
  * Domain Path:       /languages
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -36,8 +36,8 @@ define( 'IBC_ENROLLMENT_URL', plugin_dir_url( __FILE__ ) );
 require_once IBC_ENROLLMENT_PATH . 'includes/helpers.php';
 require_once IBC_ENROLLMENT_PATH . 'includes/class-loader.php';
 
-\IBC\Loader::bootstrap();
+\IBC\Enrollment\Loader::bootstrap();
 
-register_activation_hook( __FILE__, array( '\IBC\Activator', 'activate' ) );
-register_deactivation_hook( __FILE__, array( '\IBC\Deactivator', 'deactivate' ) );
-register_uninstall_hook( __FILE__, array( '\IBC\Uninstall', 'run' ) );
+register_activation_hook( __FILE__, array( '\IBC\Enrollment\Activator', 'activate' ) );
+register_deactivation_hook( __FILE__, array( '\IBC\Enrollment\Deactivator', 'deactivate' ) );
+register_uninstall_hook( __FILE__, array( '\IBC\Enrollment\Uninstall', 'run' ) );

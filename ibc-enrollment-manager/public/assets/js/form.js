@@ -18,11 +18,13 @@
 	const findFieldElement = (fieldId) => root.querySelector(`[data-ibc-field-id="${fieldId}"]`);
 
 	const emailField = schema.find((field) => field.map === 'email' || field.id === 'email');
-	const phoneField = schema.find((field) => field.map === 'phone' || field.id === 'phone');
+	const telephoneField = schema.find(
+		(field) => field.map === 'telephone' || field.id === 'telephone' || field.map === 'phone' || field.id === 'phone'
+	);
 
 	const inputs = {
 		email: emailField ? findFieldElement(emailField.id)?.querySelector('input, select, textarea') : null,
-		phone: phoneField ? findFieldElement(phoneField.id)?.querySelector('input, select, textarea') : null,
+		telephone: telephoneField ? findFieldElement(telephoneField.id)?.querySelector('input, select, textarea') : null,
 	};
 
 	let debounceTimer;
@@ -164,13 +166,13 @@
 
 	const checkCapacity = () => {
 		const email = inputs.email ? inputs.email.value.trim() : '';
-		const phone = inputs.phone ? inputs.phone.value.trim() : '';
+		const telephone = inputs.telephone ? inputs.telephone.value.trim() : '';
 
-		if (!email && !phone) {
+		if (!email && !telephone) {
 			return;
 		}
 
-		const cacheKey = `${email}|${phone}`;
+		const cacheKey = `${email}|${telephone}`;
 		if (lastCheck.key === cacheKey && Date.now() - lastCheck.time < 10000) {
 			return;
 		}
@@ -179,7 +181,8 @@
 		debounceTimer = setTimeout(() => {
 			const url = new URL(`${IBCForm.restUrl}/check`);
 			url.searchParams.append('email', email);
-			url.searchParams.append('phone', phone);
+			url.searchParams.append('telephone', telephone);
+			url.searchParams.append('phone', telephone);
 
 			fetch(url.toString(), {
 				method: 'GET',
@@ -210,8 +213,8 @@
 	if (inputs.email) {
 		inputs.email.addEventListener('input', checkCapacity);
 	}
-	if (inputs.phone) {
-		inputs.phone.addEventListener('input', checkCapacity);
+	if (inputs.telephone) {
+		inputs.telephone.addEventListener('input', checkCapacity);
 	}
 
 	const disableForm = (disabled) => {

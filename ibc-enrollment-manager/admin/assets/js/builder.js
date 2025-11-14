@@ -521,7 +521,7 @@
 		const container = document.createElement('div');
 		container.className = 'ibc-preview-form';
 		container.style.setProperty('--ibc-preview-border', colors.border || '#e2e8f0');
-		container.style.setProperty('--ibc-preview-button-bg', colors.button || '#e94162');
+		container.style.setProperty('--ibc-preview-button-bg', colors.button || '#4cb4b4');
 		container.style.setProperty('--ibc-preview-button-text', colors.button_text || '#ffffff');
 		container.style.setProperty('--ibc-preview-success-bg', colors.success_bg || '#dcfce7');
 		container.style.setProperty('--ibc-preview-error-bg', colors.error_bg || '#fee2e2');

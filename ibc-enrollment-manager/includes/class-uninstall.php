@@ -2,10 +2,10 @@
 /**
  * Uninstall routines.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -26,6 +26,7 @@ class Uninstall {
 			'ibc_capacity_limit',
 			'ibc_price_prep',
 			'ibc_brand_primary',
+			'ibc_brand_name',
 			'ibc_brand_secondary',
 			'ibc_brand_text',
 			'ibc_brand_muted',

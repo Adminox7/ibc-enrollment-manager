@@ -2,10 +2,10 @@
 /**
  * Activation callbacks.
  *
- * @package IBC\EnrollmentManager
+ * @package IBC\Enrollment
  */
 
-namespace IBC;
+namespace IBC\Enrollment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -39,18 +39,23 @@ class Activator {
 
 		update_option( 'ibc_price_prep', get_option( 'ibc_price_prep', 1000 ) );
 
+		if ( false === get_option( 'ibc_brand_name', false ) ) {
+			$site_name = get_bloginfo( 'name', 'display' );
+			update_option( 'ibc_brand_name', $site_name ?: 'IBC Morocco' );
+		}
+
 		$brand_defaults = array(
-			'primary'      => '#e94162',
-			'secondary'    => '#0f172a',
-			'text'         => '#1f2937',
-			'muted'        => '#f8fafc',
-			'border'       => '#e2e8f0',
-			'button'       => '#e94162',
-			'button_text'  => '#ffffff',
-			'success_bg'   => '#dcfce7',
+			'primary'      => '#4CB4B4',
+			'secondary'    => '#2A8E8E',
+			'text'         => '#1F2937',
+			'muted'        => '#E0F5F5',
+			'border'       => '#E5E7EB',
+			'button'       => '#4CB4B4',
+			'button_text'  => '#FFFFFF',
+			'success_bg'   => '#DCFCE7',
 			'success_text' => '#166534',
-			'error_bg'     => '#fee2e2',
-			'error_text'   => '#991b1b',
+			'error_bg'     => '#FEE2E2',
+			'error_text'   => '#B91C1C',
 		);
 
 		foreach ( $brand_defaults as $key => $value ) {
@@ -101,8 +106,8 @@ class Activator {
 			update_option( 'ibc_last_token_issued', '' );
 		}
 
-		if ( false === get_option( 'ibc_form_schema', false ) && class_exists( '\IBC\FormBuilder' ) ) {
-			$builder = new \IBC\FormBuilder();
+		if ( false === get_option( 'ibc_form_schema', false ) && class_exists( '\IBC\Enrollment\FormBuilder' ) ) {
+			$builder = new \IBC\Enrollment\FormBuilder();
 			update_option( 'ibc_form_schema', $builder->get_default_schema() );
 		}
 	}
