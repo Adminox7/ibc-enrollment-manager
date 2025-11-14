@@ -1,316 +1,327 @@
-/* global IBCForm */
+/* global IBCEnrollmentForm */
+
 (function () {
 	'use strict';
 
-	const root = document.querySelector('[data-ibc-form]');
-	if (!root || typeof IBCForm === 'undefined') {
+	if (!window.IBCEnrollmentForm) {
 		return;
 	}
 
-	const form = root.querySelector('form');
-	const feedback = root.querySelector('.ibc-form-feedback');
-	const successPopup = root.querySelector('[data-ibc-success]');
-	const successText = successPopup ? successPopup.querySelector('[data-ibc-success-text]') : null;
-	const successDownload = successPopup ? successPopup.querySelector('[data-ibc-download]') : null;
-	const closedPopup = root.querySelector('[data-ibc-closed]');
-	const schema = Array.isArray(IBCForm.fields) ? IBCForm.fields : [];
+	const settings = window.IBCEnrollmentForm;
+	const roots = document.querySelectorAll('[data-ibc-form]');
+	if (!roots.length) {
+		return;
+	}
 
-	const findFieldElement = (fieldId) => root.querySelector(`[data-ibc-field-id="${fieldId}"]`);
+	const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+	const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB safety net.
 
-	const emailField = schema.find((field) => field.map === 'email' || field.id === 'email');
-	const telephoneField = schema.find(
-		(field) => field.map === 'telephone' || field.id === 'telephone' || field.map === 'phone' || field.id === 'phone'
-	);
-
-	const inputs = {
-		email: emailField ? findFieldElement(emailField.id)?.querySelector('input, select, textarea') : null,
-		telephone: telephoneField ? findFieldElement(telephoneField.id)?.querySelector('input, select, textarea') : null,
+	const apiFetch = (endpoint, options = {}) => {
+		const base = settings.restUrl?.replace(/\/$/, '') || '';
+		return fetch(`${base}${endpoint}`, {
+			credentials: 'same-origin',
+			headers: {
+				'X-WP-Nonce': settings.nonce || '',
+				...(options.headers || {}),
+			},
+			...options,
+		}).then(async (response) => {
+			const contentType = response.headers.get('content-type') || '';
+			if (!contentType.includes('application/json')) {
+				throw new Error(settings.messages?.serverError || 'Unexpected response.');
+			}
+			const data = await response.json();
+			if (!response.ok || data.success === false) {
+				throw new Error(data.message || settings.messages?.serverError || 'Request failed.');
+			}
+			return data;
+		});
 	};
 
-	let debounceTimer;
-	let lastCheck = {};
+	const normalizeEmail = (value) => (value || '').trim().toLowerCase();
+	const normalizePhone = (value) => (value || '').replace(/[^\d+]/g, '').trim();
 
-	const showFeedback = (message, type = 'error') => {
-		if (!feedback) {
+	const formatBytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+	const showFeedback = (box, message, isSuccess = false) => {
+		if (!box) {
 			return;
 		}
-		feedback.textContent = message;
-		feedback.hidden = false;
-		feedback.classList.toggle('ibc-form-feedback-error', type === 'error');
-		feedback.classList.toggle('ibc-form-feedback-success', type === 'success');
+		box.textContent = message;
+		box.hidden = false;
+		box.classList.toggle('ibc-form-feedback-success', isSuccess);
 	};
 
-	const clearFeedback = () => {
-		if (feedback) {
-			feedback.hidden = true;
-			feedback.textContent = '';
-			feedback.classList.remove('ibc-form-feedback-error', 'ibc-form-feedback-success');
+	const hideFeedback = (box) => {
+		if (!box) {
+			return;
+		}
+		box.hidden = true;
+		box.textContent = '';
+		box.classList.remove('ibc-form-feedback-success');
+	};
+
+	const toggleModal = (modal, open) => {
+		if (!modal) {
+			return;
+		}
+		modal.hidden = !open;
+		modal.setAttribute('aria-hidden', String(!open));
+		document.body.classList.toggle('ibc-modal-open', open);
+		if (open) {
+			const primaryAction = modal.querySelector('a, button, input, select, textarea');
+			if (primaryAction instanceof HTMLElement) {
+				primaryAction.focus();
+			}
 		}
 	};
 
-	let activeModal = null;
-	let lastFocusedElement = null;
+	const resetDownloadLink = (link) => {
+		if (!link) {
+			return;
+		}
+		link.classList.add('is-disabled');
+		link.setAttribute('aria-disabled', 'true');
+		link.removeAttribute('href');
+		link.removeAttribute('download');
+	};
 
-	const focusableSelectors = [
-		'a[href]',
-		'button:not([disabled])',
-		'input:not([disabled])',
-		'select:not([disabled])',
-		'textarea:not([disabled])',
-		'[tabindex]:not([tabindex="-1"])',
-	].join(', ');
+	const enableDownloadLink = (link, url, reference) => {
+		if (!link || !url) {
+			return;
+		}
+		link.classList.remove('is-disabled');
+		link.removeAttribute('aria-disabled');
+		link.href = url;
+		if (reference) {
+			link.download = `recu-prepa-${reference}.pdf`;
+		}
+	};
 
-	const trapFocus = (event) => {
-		if (!activeModal || event.key !== 'Tab') {
+	const markFieldError = (fieldWrapper, message) => {
+		fieldWrapper?.classList.add('is-error');
+		const hint = fieldWrapper?.querySelector('.ibc-field-error');
+		if (hint) {
+			hint.textContent = message;
+			return;
+		}
+		const small = document.createElement('p');
+		small.className = 'ibc-field-error';
+		small.textContent = message;
+		fieldWrapper?.appendChild(small);
+	};
+
+	const clearFieldError = (fieldWrapper) => {
+		fieldWrapper?.classList.remove('is-error');
+		const hint = fieldWrapper?.querySelector('.ibc-field-error');
+		if (hint) {
+			hint.remove();
+		}
+	};
+
+	const validateFileInput = (input, fieldWrapper) => {
+		clearFieldError(fieldWrapper);
+		const file = input?.files?.[0];
+		if (!file) {
+			if (input?.required) {
+				markFieldError(fieldWrapper, settings.messages?.validation || 'Veuillez fournir ce document.');
+				return false;
+			}
+			return true;
+		}
+
+		if (!ALLOWED_TYPES.includes(file.type)) {
+			markFieldError(fieldWrapper, settings.messages?.uploadError || 'Format non autorisé.');
+			return false;
+		}
+
+		if (file.size > MAX_FILE_SIZE) {
+			markFieldError(
+				fieldWrapper,
+				`${settings.messages?.uploadError || 'Fichier trop volumineux.'} (${formatBytes(file.size)} > ${formatBytes(
+					MAX_FILE_SIZE
+				)})`
+			);
+			return false;
+		}
+
+		return true;
+	};
+
+	const serializeForm = (form) => new FormData(form);
+
+	const initForm = (root) => {
+		const form = root.querySelector('form');
+		const feedback = root.querySelector('.ibc-form-feedback');
+		const successModal = root.querySelector('[data-ibc-success]');
+		const successText = successModal?.querySelector('[data-ibc-success-text]');
+		const successDownload = successModal?.querySelector('[data-ibc-download]');
+		const closedModal = root.querySelector('[data-ibc-closed]');
+
+		if (!form) {
 			return;
 		}
 
-		const focusable = Array.from(activeModal.querySelectorAll(focusableSelectors)).filter(
-			(element) => element.offsetParent !== null || element === document.activeElement
+		let capacitySnapshot = null;
+		let debounceTimer = null;
+
+		const emailInput = root.querySelector('[data-ibc-field-map="email"] input, [data-ibc-field-map="email"] textarea');
+		const phoneInput = root.querySelector(
+			'[data-ibc-field-map="telephone"] input, [data-ibc-field-map="telephone"] textarea, [data-ibc-field-map="phone"] input'
 		);
 
-		if (!focusable.length) {
-			event.preventDefault();
-			return;
-		}
+		const runDupCheck = () => {
+			const email = normalizeEmail(emailInput?.value || '');
+			const phone = normalizePhone(phoneInput?.value || '');
 
-		const first = focusable[0];
-		const last = focusable[focusable.length - 1];
-
-		if (event.shiftKey && document.activeElement === first) {
-			event.preventDefault();
-			last.focus();
-		} else if (!event.shiftKey && document.activeElement === last) {
-			event.preventDefault();
-			first.focus();
-		}
-	};
-
-	const openModal = (modal) => {
-		if (!modal) {
-			return;
-		}
-		lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		modal.hidden = false;
-		modal.setAttribute('aria-hidden', 'false');
-		document.body.classList.add('ibc-modal-open');
-		activeModal = modal;
-
-		const focusable = modal.querySelectorAll(focusableSelectors);
-		if (focusable.length > 0) {
-			focusable[0].focus();
-		} else {
-			modal.focus();
-		}
-	};
-
-	const closeModal = (modal) => {
-		if (!modal) {
-			return;
-		}
-		modal.hidden = true;
-		modal.setAttribute('aria-hidden', 'true');
-		if (!document.querySelector('.ibc-popup:not([hidden])')) {
-			document.body.classList.remove('ibc-modal-open');
-			activeModal = null;
-		}
-		if (lastFocusedElement) {
-			lastFocusedElement.focus();
-		}
-	};
-
-	document.addEventListener('keydown', (event) => {
-		if (event.key === 'Escape' && activeModal) {
-			event.preventDefault();
-			closeModal(activeModal);
-		}
-	});
-
-	document.addEventListener('keydown', trapFocus, true);
-
-	root.querySelectorAll('[data-ibc-close]').forEach((button) => {
-		button.addEventListener('click', () => {
-			closeModal(button.closest('.ibc-popup'));
-		});
-	});
-
-	[successPopup, closedPopup].forEach((modal) => {
-		if (!modal) {
-			return;
-		}
-		modal.addEventListener('click', (event) => {
-			if (event.target === modal) {
-				closeModal(modal);
+			if (!email && !phone) {
+				return;
 			}
-		});
-	});
 
-	if (successDownload) {
-		successDownload.addEventListener('click', (event) => {
-			const url = successDownload.getAttribute('href');
-			const isDisabled = successDownload.classList.contains('is-disabled');
-			if (!url || isDisabled) {
+			if (capacitySnapshot && capacitySnapshot.email === email && capacitySnapshot.phone === phone) {
+				return;
+			}
+
+			clearTimeout(debounceTimer);
+			debounceTimer = setTimeout(() => {
+				const params = new URLSearchParams();
+				params.set('email', email);
+				params.set('telephone', phone);
+				params.set('phone', phone);
+
+				apiFetch(`/check?${params.toString()}`, { method: 'GET' })
+					.then((response) => {
+						capacitySnapshot = {
+							email,
+							phone,
+							data: response.data || {},
+						};
+
+						const info = capacitySnapshot.data || {};
+						if (info.existsEmail || info.existsPhone) {
+							showFeedback(feedback, settings.messages?.duplicate || 'Inscription déjà enregistrée.');
+						} else if (info.capacity > 0 && info.total >= info.capacity) {
+							showFeedback(feedback, settings.messages?.capacity || 'Les inscriptions sont closes.');
+						} else {
+							hideFeedback(feedback);
+						}
+					})
+					.catch(() => {
+						// silent fail
+					});
+			}, 400);
+		};
+
+		emailInput?.addEventListener('input', runDupCheck);
+		phoneInput?.addEventListener('input', runDupCheck);
+
+		root.querySelectorAll('[data-ibc-close]').forEach((btn) => {
+			btn.addEventListener('click', () => toggleModal(btn.closest('.ibc-popup'), false));
+		});
+
+		successDownload?.addEventListener('click', (event) => {
+			if (successDownload.classList.contains('is-disabled')) {
 				event.preventDefault();
-				return;
 			}
 		});
-	}
 
-	const ensureJson = async (response) => {
-		const contentType = (response.headers.get('content-type') || '').toLowerCase();
-		if (!contentType.includes('application/json')) {
-			throw new Error(IBCForm.messages.nonJson || 'Non-JSON response received.');
-		}
-		return response.json();
-	};
+		const validateForm = () => {
+			let valid = form.checkValidity();
 
-	const checkCapacity = () => {
-		const email = inputs.email ? inputs.email.value.trim() : '';
-		const telephone = inputs.telephone ? inputs.telephone.value.trim() : '';
-
-		if (!email && !telephone) {
-			return;
-		}
-
-		const cacheKey = `${email}|${telephone}`;
-		if (lastCheck.key === cacheKey && Date.now() - lastCheck.time < 10000) {
-			return;
-		}
-
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			const url = new URL(`${IBCForm.restUrl}/check`);
-			url.searchParams.append('email', email);
-			url.searchParams.append('telephone', telephone);
-			url.searchParams.append('phone', telephone);
-
-			fetch(url.toString(), {
-				method: 'GET',
-				credentials: 'same-origin',
-			})
-				.then(ensureJson)
-				.then((result) => {
-					if (!result.success) {
-						return;
-					}
-
-					lastCheck = { key: cacheKey, time: Date.now(), data: result.data };
-
-					if (result.data.existsEmail || result.data.existsPhone) {
-						showFeedback(IBCForm.messages.duplicate);
-					} else if (result.data.capacity > 0 && result.data.total >= result.data.capacity) {
-						showFeedback(IBCForm.messages.capacity);
-					} else {
-						clearFeedback();
-					}
-				})
-				.catch(() => {
-					// Quietly ignore network errors for preview checks.
-				});
-		}, 400);
-	};
-
-	if (inputs.email) {
-		inputs.email.addEventListener('input', checkCapacity);
-	}
-	if (inputs.telephone) {
-		inputs.telephone.addEventListener('input', checkCapacity);
-	}
-
-	const disableForm = (disabled) => {
-		const button = form.querySelector('button[type="submit"]');
-		if (button) {
-			button.disabled = disabled;
-		}
-	};
-
-	const buildFormData = () => {
-		const data = new FormData(form);
-		return data;
-	};
-
-	const resetCheckState = () => {
-		lastCheck = {};
-	};
-
-	form.addEventListener('submit', (event) => {
-		event.preventDefault();
-		clearFeedback();
-
-		const last = lastCheck.data;
-		if (last) {
-			if (last.existsEmail || last.existsPhone) {
-				showFeedback(IBCForm.messages.duplicate);
-				return;
-			}
-			if (last.capacity > 0 && last.total >= last.capacity) {
-				togglePopup(closedPopup, true);
-				return;
-			}
-		}
-
-		const formData = buildFormData();
-		formData.append('_locale', 'fr');
-
-		disableForm(true);
-
-		fetch(`${IBCForm.restUrl}/register`, {
-			method: 'POST',
-			credentials: 'same-origin',
-			body: formData,
-		})
-			.then(ensureJson)
-			.then((payload) => {
-				if (!payload.success) {
-					const message = payload.message || IBCForm.messages.error;
-					throw new Error(message);
+			form.querySelectorAll('[data-ibc-field-id]').forEach((wrapper) => {
+				clearFieldError(wrapper);
+				const control = wrapper.querySelector('input, textarea, select');
+				if (!control) {
+					return;
 				}
 
-  				form.reset();
-  				resetCheckState();
-
-  				const data = payload.data || {};
-  				const reference = data.reference || data.ref || '';
-  				const receiptUrl = data.receipt_url || data.receiptUrl || '';
-  				const pdfAvailable =
-  					typeof data.pdf_available === 'boolean'
-  						? data.pdf_available
-  						: Boolean(receiptUrl);
-
-  				if (successText) {
-  					successText.textContent = pdfAvailable
-  						? IBCForm.messages.success ||
-  						  'Votre préinscription est enregistrée. Vous pouvez maintenant télécharger votre reçu de préinscription.'
-  						: IBCForm.messages.successNoPdf ||
-  						  'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail.';
-  				}
-
-  				if (successDownload) {
-  					if (pdfAvailable && receiptUrl) {
-  						successDownload.classList.remove('is-disabled');
-  						successDownload.removeAttribute('aria-disabled');
-						successDownload.setAttribute('href', receiptUrl);
-						successDownload.setAttribute('download', reference ? `recu-prepa-${reference}.pdf` : '');
-  					} else {
-  						successDownload.classList.add('is-disabled');
-  						successDownload.setAttribute('aria-disabled', 'true');
-  						successDownload.removeAttribute('href');
-  						successDownload.removeAttribute('download');
-  					}
-  				}
-
-  				openModal(successPopup);
-			})
-			.catch((error) => {
-				const message = error.message || IBCForm.messages.error;
-				if (message === IBCForm.messages.capacity) {
-  					openModal(closedPopup);
-				} else {
-					showFeedback(message);
+				if (control.type === 'file') {
+					valid = validateFileInput(control, wrapper) && valid;
+					return;
 				}
-			})
-			.finally(() => {
-				disableForm(false);
+
+				if (!control.checkValidity()) {
+					markFieldError(wrapper, settings.messages?.validation || 'Champ requis.');
+					valid = false;
+				}
 			});
-	});
+
+			if (!valid && feedback) {
+				showFeedback(feedback, settings.messages?.validation || 'Merci de vérifier les champs en surbrillance.');
+			}
+
+			return valid;
+		};
+
+		const disableForm = (state) => {
+			const submit = form.querySelector('[type="submit"]');
+			if (submit) {
+				submit.disabled = state;
+			}
+		};
+
+		form.addEventListener('submit', (event) => {
+			event.preventDefault();
+			hideFeedback(feedback);
+
+			if (!validateForm()) {
+				return;
+			}
+
+			const info = capacitySnapshot?.data;
+			if (info) {
+				if (info.existsEmail || info.existsPhone) {
+					showFeedback(feedback, settings.messages?.duplicate || 'Inscription déjà enregistrée.');
+					return;
+				}
+				if (info.capacity > 0 && info.total >= info.capacity) {
+					toggleModal(closedModal, true);
+					return;
+				}
+			}
+
+			const formData = serializeForm(form);
+			disableForm(true);
+
+			apiFetch('/register', {
+				method: 'POST',
+				body: formData,
+			})
+				.then((payload) => {
+					const data = payload.data || {};
+					form.reset();
+					capacitySnapshot = null;
+
+					const pdfUrl = data.receipt_url || data.receiptUrl || '';
+					const reference = data.reference || data.ref || '';
+					const pdfAvailable =
+						typeof data.pdf_available === 'boolean'
+							? data.pdf_available
+							: Boolean(pdfUrl);
+
+					if (successText) {
+						successText.textContent = pdfAvailable
+							? settings.messages?.success ||
+							  'Votre préinscription est enregistrée. Téléchargez votre reçu.'
+							: settings.messages?.successNoPdf ||
+							  'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail.';
+					}
+
+					resetDownloadLink(successDownload);
+					if (pdfAvailable && pdfUrl) {
+						enableDownloadLink(successDownload, pdfUrl, reference);
+					}
+
+					toggleModal(successModal, true);
+				})
+				.catch((error) => {
+					showFeedback(feedback, error.message || settings.messages?.serverError || 'Erreur inattendue.');
+				})
+				.finally(() => {
+					disableForm(false);
+				});
+		});
+	};
+
+	roots.forEach(initForm);
 })();

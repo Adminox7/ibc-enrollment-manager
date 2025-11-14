@@ -1,179 +1,137 @@
 <?php
 /**
- * Loader for IBC Enrollment Manager.
+ * Plugin runtime loader.
  *
  * @package IBC\Enrollment
  */
 
-namespace IBC\Enrollment;
+declare( strict_types=1 );
+
+namespace IBC\Enrollment\Core;
+
+use IBC\Enrollment\Admin\Dashboard;
+use IBC\Enrollment\Database\DB;
+use IBC\Enrollment\Rest\RestController;
+use IBC\Enrollment\Security\Auth;
+use IBC\Enrollment\Services\EmailService;
+use IBC\Enrollment\Services\PdfService;
+use IBC\Enrollment\Services\Registrations;
+use IBC\Enrollment\Support\Assets;
+use IBC\Enrollment\Support\Shortcodes;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Class Loader
+ * Bootstraps and wires every plugin service.
  */
 class Loader {
 
 	/**
-	 * Singleton instance.
-	 *
-	 * @var Loader|null
+	 * Tracks if boot() already ran.
 	 */
-	private static ?Loader $instance = null;
+	private bool $booted = false;
 
 	/**
-	 * Whether bootstrap already executed.
-	 *
-	 * @var bool
+	 * Database gateway singleton.
 	 */
-	private static bool $bootstrapped = false;
+	private DB $db;
 
 	/**
-	 * Settings handler.
-	 *
-	 * @var Settings
-	 */
-	private Settings $settings;
-
-	/**
-	 * Registrations domain service.
-	 *
-	 * @var Registrations
+	 * Registration domain service.
 	 */
 	private Registrations $registrations;
 
 	/**
-	 * Authentication manager.
-	 *
-	 * @var Auth
+	 * REST controller (ibc/v1).
+	 */
+	private RestController $rest;
+
+	/**
+	 * Token-based auth service.
 	 */
 	private Auth $auth;
 
 	/**
-	 * Asset manager.
-	 *
-	 * @var Assets
+	 * Asset manager (admin + public).
 	 */
 	private Assets $assets;
 
 	/**
-	 * Shortcodes handler.
-	 *
-	 * @var Shortcodes
+	 * Shortcode handler (front form).
 	 */
 	private Shortcodes $shortcodes;
 
 	/**
-	 * Form builder service.
-	 *
-	 * @var FormBuilder
+	 * Admin dashboard controller.
 	 */
-	private FormBuilder $form_builder;
+	private Dashboard $dashboard;
 
 	/**
-	 * REST API handler.
-	 *
-	 * @var REST
-	 */
-	private REST $rest;
-
-	/**
-	 * Bootstrap plugin.
+	 * Bootstraps the plugin (idempotent).
 	 *
 	 * @return void
 	 */
-	public static function bootstrap(): void {
-		if ( self::$bootstrapped ) {
+	public function boot(): void {
+		if ( $this->booted ) {
 			return;
 		}
 
-		self::$bootstrapped = true;
-		self::load_dependencies();
-		self::instance();
-	}
+		$this->booted = true;
 
-	/**
-	 * Retrieve singleton.
-	 *
-	 * @return Loader
-	 */
-	public static function instance(): Loader {
-		if ( null === self::$instance ) {
-			self::$instance = new self();
-		}
-
-		return self::$instance;
-	}
-
-	/**
-	 * Constructor.
-	 */
-	private function __construct() {
-		$this->form_builder  = new FormBuilder();
-		$this->settings      = new Settings( $this->form_builder );
-		$db                  = DB::instance();
-		$email               = new Email();
-		$pdf                 = new PDF();
-		$this->registrations = new Registrations( $db, $email, $pdf, $this->form_builder );
+		$this->db            = DB::instance();
 		$this->auth          = new Auth();
-		$this->assets        = new Assets( $this->form_builder );
-		$this->shortcodes    = new Shortcodes( $this->registrations, $this->auth, $this->form_builder );
-		$this->rest          = new REST( $this->registrations, $this->auth );
+		$email_service       = new EmailService();
+		$pdf_service         = new PdfService();
+		$this->registrations = new Registrations( $this->db, $email_service, $pdf_service );
+		$this->rest          = new RestController( $this->registrations, $this->auth );
+		$this->assets        = new Assets();
+		$this->shortcodes    = new Shortcodes( $this->registrations );
+		$this->dashboard     = new Dashboard( $this->registrations, $this->auth );
 
-		add_action( 'plugins_loaded', array( $this, 'on_plugins_loaded' ) );
+		$this->register_hooks();
+
+		/**
+		 * Fires after the loader fully boots.
+		 *
+		 * @param Loader $this Loader instance.
+		 */
+		do_action( 'ibc_enrollment_booted', $this );
 	}
 
 	/**
-	 * Load dependencies.
+	 * Registers WP hooks for every service.
 	 *
 	 * @return void
 	 */
-	private static function load_dependencies(): void {
-		$files = array(
-			'includes/class-activator.php',
-			'includes/class-deactivator.php',
-			'includes/class-uninstall.php',
-			'includes/class-db.php',
-			'includes/class-formbuilder.php',
-			'includes/class-settings.php',
-			'includes/class-auth.php',
-			'includes/class-assets.php',
-			'includes/class-shortcodes.php',
-			'includes/class-email.php',
-			'includes/class-pdf.php',
-			'includes/class-registrations.php',
-			'includes/class-rest.php',
-		);
-
-		foreach ( $files as $file ) {
-			require_once IBC_ENROLLMENT_PATH . $file;
-		}
-
-		require_once IBC_ENROLLMENT_PATH . 'admin/class-admin-page.php';
-
-		$dompdf_autoload = IBC_ENROLLMENT_PATH . 'vendor/dompdf/autoload.inc.php';
-		if ( file_exists( $dompdf_autoload ) ) {
-			require_once $dompdf_autoload;
-		}
+	private function register_hooks(): void {
+		add_action( 'init', [ $this, 'init' ] );
+		add_action( 'rest_api_init', [ $this->rest, 'register_routes' ] );
+		add_action( 'admin_init', [ $this->dashboard, 'handle_token_reset' ] );
+		add_action( 'admin_menu', [ $this->dashboard, 'register_page' ] );
+		add_action( 'admin_enqueue_scripts', [ $this->assets, 'enqueue_admin' ] );
+		add_action( 'wp_enqueue_scripts', [ $this->assets, 'enqueue_public' ] );
+		add_action( 'wp_ajax_ibc_download_receipt', [ $this->registrations, 'handle_ajax_receipt' ] );
+		add_action( 'wp_ajax_nopriv_ibc_download_receipt', [ $this->registrations, 'handle_ajax_receipt' ] );
 	}
 
 	/**
-	 * Plugin loaded hook.
+	 * Initializes run-time features hooked to `init`.
 	 *
 	 * @return void
 	 */
-	public function on_plugins_loaded(): void {
-		load_plugin_textdomain(
-			'ibc-enrollment-manager',
-			false,
-			dirname( IBC_ENROLLMENT_BASENAME ) . '/languages/'
-		);
+	public function init(): void {
+		$this->shortcodes->register();
+		$this->assets->register_shared_theme_variables();
+	}
 
-		$this->settings->register_hooks();
-		$this->assets->register_hooks();
-		$this->shortcodes->register_hooks();
-		$this->rest->register_hooks();
+	/**
+	 * Exposes the registrations service for other components.
+	 *
+	 * @return Registrations
+	 */
+	public function registrations(): Registrations {
+		return $this->registrations;
 	}
 }

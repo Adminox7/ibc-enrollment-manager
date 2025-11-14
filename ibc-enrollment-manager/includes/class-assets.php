@@ -1,225 +1,218 @@
 <?php
 /**
- * Assets management.
+ * Centralized asset manager (front + admin).
  *
  * @package IBC\Enrollment
  */
 
-namespace IBC\Enrollment;
+declare( strict_types=1 );
 
-use IBC\Enrollment\FormBuilder;
+namespace IBC\Enrollment\Support;
+
+use IBC\Enrollment\Rest\RestController;
+use function IBC\Enrollment\ibc_get_brand_colors_with_legacy;
+use function IBC\Enrollment\ibc_get_brand_name;
+use function IBC\Enrollment\ibc_has_shortcode;
+use function IBC\Enrollment\ibc_get_option;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Class Assets
+ * Handles CSS/JS loading and shared theme variables.
  */
 class Assets {
 
 	/**
-	 * Form builder.
-	 *
-	 * @var FormBuilder
+	 * Shortcode tag for the public form.
 	 */
-	private FormBuilder $form_builder;
+	private const FORM_SHORTCODE = 'ibc_enrollment_form';
 
 	/**
-	 * Constructor.
-	 *
-	 * @param FormBuilder $form_builder Form builder instance.
+	 * Admin page slug where dashboard assets must load.
 	 */
-	public function __construct( FormBuilder $form_builder ) {
-		$this->form_builder = $form_builder;
-	}
+	public const DASHBOARD_PAGE_SLUG = 'ibc-enrollment-dashboard';
 
 	/**
-	 * Register hooks.
+	 * Prints `:root` variables only once.
+	 *
+	 * @var bool
+	 */
+	private bool $printed_theme_vars = false;
+
+	/**
+	 * Registers inline theme variables on front + admin heads.
 	 *
 	 * @return void
 	 */
-	public function register_hooks(): void {
-		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_public' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin' ) );
+	public function register_shared_theme_variables(): void {
+		add_action( 'wp_head', [ $this, 'output_theme_variables' ], 1 );
+		add_action( 'admin_head', [ $this, 'output_theme_variables' ], 1 );
 	}
 
 	/**
-	 * Enqueue public assets when needed.
+	 * Echoes CSS custom properties derived from plugin settings.
 	 *
 	 * @return void
 	 */
-	public function maybe_enqueue_public(): void {
+	public function output_theme_variables(): void {
+		if ( $this->printed_theme_vars ) {
+			return;
+		}
+
+		$this->printed_theme_vars = true;
+
+		$palette = $this->palette();
+
+		printf(
+			'<style id="ibc-enrollment-theme-vars">:root{--ibc-primary:%1$s;--ibc-primary-dark:%2$s;--ibc-primary-light:%3$s;--ibc-text-dark:%4$s;--ibc-text-muted:%5$s;--ibc-success:%6$s;--ibc-success-bg:%7$s;--ibc-danger:%8$s;--ibc-danger-bg:%9$s;font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}</style>',
+			esc_html( $palette['primary'] ),
+			esc_html( $palette['primary_dark'] ),
+			esc_html( $palette['primary_light'] ),
+			esc_html( $palette['text_dark'] ),
+			esc_html( $palette['text_muted'] ),
+			esc_html( $palette['success'] ),
+			esc_html( $palette['success_bg'] ),
+			esc_html( $palette['danger'] ),
+			esc_html( $palette['danger_bg'] )
+		);
+	}
+
+	/**
+	 * Enqueues frontend assets only when the shortcode is present.
+	 *
+	 * @return void
+	 */
+	public function enqueue_public(): void {
 		if ( is_admin() ) {
 			return;
 		}
 
-		global $post;
-
-		if ( ibc_has_shortcode( 'ibc_register', $post ) ) {
-			$schema = $this->form_builder->get_public_schema();
-			$colors = ibc_get_brand_colors_with_legacy();
-
-			wp_enqueue_style(
-				'ibc-form',
-				IBC_ENROLLMENT_URL . 'public/assets/css/form.css',
-				array(),
-				IBC_ENROLLMENT_VERSION
-			);
-
-			wp_enqueue_script(
-				'ibc-form',
-				IBC_ENROLLMENT_URL . 'public/assets/js/form.js',
-				array(),
-				IBC_ENROLLMENT_VERSION,
-				true
-			);
-
-			wp_localize_script(
-				'ibc-form',
-				'IBCForm',
-				array(
-					'restUrl'  => esc_url_raw( rtrim( rest_url( REST::ROUTE_NAMESPACE ), '/' ) ),
-					'fields'   => $schema,
-					'colors'   => $colors,
-					'messages' => array(
-						'success'   => esc_html__( 'Votre préinscription est enregistrée. Veuillez télécharger votre reçu et effectuer le paiement sous 24 h.', 'ibc-enrollment-manager' ),
-						'successNoPdf' => esc_html__( 'Votre préinscription est enregistrée. Le reçu vous sera envoyé par e-mail et le paiement reste requis sous 24 h.', 'ibc-enrollment-manager' ),
-						'duplicate' => esc_html__( 'Une inscription existe déjà pour ces coordonnées.', 'ibc-enrollment-manager' ),
-						'capacity'  => esc_html__( 'La capacité maximale est atteinte.', 'ibc-enrollment-manager' ),
-						'error'     => esc_html__( 'Une erreur est survenue. Merci de réessayer.', 'ibc-enrollment-manager' ),
-						'nonJson'   => esc_html__( 'Réponse invalide du serveur.', 'ibc-enrollment-manager' ),
-					),
-				)
-			);
+		if ( ! ibc_has_shortcode( self::FORM_SHORTCODE ) ) {
+			return;
 		}
 
-		if ( ibc_has_shortcode( 'ibc_admin_dashboard', $post ) ) {
-			wp_enqueue_style(
-				'ibc-admin-dashboard',
-				IBC_ENROLLMENT_URL . 'admin/assets/css/ibc-admin.css',
-				array(),
-				IBC_ENROLLMENT_VERSION
-			);
+		$palette = $this->palette();
 
-			wp_enqueue_script(
-				'ibc-admin-dashboard',
-				IBC_ENROLLMENT_URL . 'admin/assets/js/ibc-admin.js',
-				array( 'jquery' ),
-				IBC_ENROLLMENT_VERSION,
-				true
-			);
+		wp_enqueue_style(
+			'ibc-enrollment-form',
+			IBC_ENROLLMENT_PLUGIN_URL . 'public/assets/css/form.css',
+			[],
+			IBC_ENROLLMENT_VERSION
+		);
 
-			wp_localize_script(
-				'ibc-admin-dashboard',
-				'IBCDashboard',
-				array(
-					'restUrl' => esc_url_raw( rtrim( rest_url( REST::ROUTE_NAMESPACE ), '/' ) ),
-					'texts'   => array(
-						'loginTitle'   => esc_html__( 'Accès sécurisé', 'ibc-enrollment-manager' ),
-						'loginError'   => esc_html__( 'Mot de passe incorrect.', 'ibc-enrollment-manager' ),
-						'saveSuccess'  => esc_html__( 'Inscription mise à jour.', 'ibc-enrollment-manager' ),
-						'deleteConfirm'=> esc_html__( 'Confirmer l’annulation de cette inscription ?', 'ibc-enrollment-manager' ),
-						'deleteDone'   => esc_html__( 'Inscription annulée.', 'ibc-enrollment-manager' ),
-						'page'         => esc_html__( 'Page', 'ibc-enrollment-manager' ),
-						'edit'         => esc_html__( 'Modifier', 'ibc-enrollment-manager' ),
-						'delete'       => esc_html__( 'Supprimer', 'ibc-enrollment-manager' ),
-						'empty'        => esc_html__( 'Aucune inscription trouvée.', 'ibc-enrollment-manager' ),
-						'nonJson'      => esc_html__( 'Réponse invalide du serveur.', 'ibc-enrollment-manager' ),
-						'extraTitle'   => esc_html__( 'Informations complémentaires', 'ibc-enrollment-manager' ),
-						'download'     => esc_html__( 'Télécharger', 'ibc-enrollment-manager' ),
-						'docRecto'     => esc_html__( 'Recto', 'ibc-enrollment-manager' ),
-						'docVerso'     => esc_html__( 'Verso', 'ibc-enrollment-manager' ),
-						'docMissing'   => esc_html__( 'Aucun fichier', 'ibc-enrollment-manager' ),
-						'ready'        => esc_html__( 'Prêt', 'ibc-enrollment-manager' ),
-						'loading'      => esc_html__( 'Chargement…', 'ibc-enrollment-manager' ),
-						'refreshed'    => esc_html__( 'Données mises à jour.', 'ibc-enrollment-manager' ),
-						'save'         => esc_html__( 'Sauver', 'ibc-enrollment-manager' ),
-						'saveStatus'   => esc_html__( 'Statut mis à jour.', 'ibc-enrollment-manager' ),
-						'saveError'    => esc_html__( 'Impossible d’enregistrer les modifications.', 'ibc-enrollment-manager' ),
-						'saving'       => esc_html__( 'Enregistrement…', 'ibc-enrollment-manager' ),
-						'deleting'     => esc_html__( 'Suppression en cours…', 'ibc-enrollment-manager' ),
-						'deleteError'  => esc_html__( 'Impossible de supprimer l’inscription.', 'ibc-enrollment-manager' ),
-						'exported'     => esc_html__( 'Export CSV généré.', 'ibc-enrollment-manager' ),
-						'logoutDone'   => esc_html__( 'Déconnexion effectuée.', 'ibc-enrollment-manager' ),
-						'statusConfirm'=> esc_html__( 'Confirmée', 'ibc-enrollment-manager' ),
-						'statusCancel' => esc_html__( 'Annulée', 'ibc-enrollment-manager' ),
-						'loginRequired'=> esc_html__( 'Connexion requise.', 'ibc-enrollment-manager' ),
-					),
-				)
-			);
-		}
+		wp_enqueue_script(
+			'ibc-enrollment-form',
+			IBC_ENROLLMENT_PLUGIN_URL . 'public/assets/js/form.js',
+			[],
+			IBC_ENROLLMENT_VERSION,
+			true
+		);
+
+		wp_localize_script(
+			'ibc-enrollment-form',
+			'IBCEnrollmentForm',
+			[
+				'restUrl'  => esc_url_raw( rest_url( RestController::NAMESPACE . '/' ) ),
+				'nonce'    => wp_create_nonce( 'wp_rest' ),
+				'brand'    => [
+					'name'    => ibc_get_brand_name(),
+					'palette' => $palette,
+				],
+				'messages' => [
+					'success'       => __( 'Inscription réussie. Téléchargez votre reçu PDF et vérifiez vos e-mails.', 'ibc-enrollment' ),
+					'duplicate'     => __( 'Cet e-mail ou numéro est déjà inscrit.', 'ibc-enrollment' ),
+					'capacity'      => __( 'Le quota est atteint pour cette session.', 'ibc-enrollment' ),
+					'validation'    => __( 'Merci de vérifier les champs en surbrillance.', 'ibc-enrollment' ),
+					'uploadError'   => __( 'Téléversement impossible. Utilisez un fichier JPG, PNG ou PDF.', 'ibc-enrollment' ),
+					'serverError'   => __( 'Erreur serveur. Réessayez plus tard.', 'ibc-enrollment' ),
+					'networkError'  => __( 'Connexion impossible. Vérifiez votre réseau.', 'ibc-enrollment' ),
+				],
+				'limits'   => [
+					'capacity' => (int) ibc_get_option( 'ibc_capacity_limit', 1466 ),
+					'price'    => (int) ibc_get_option( 'ibc_price_prep', 1000 ),
+				],
+			]
+		);
 	}
 
 	/**
-	 * Enqueue admin assets for settings page.
+	 * Enqueues dashboard assets on our admin screen.
 	 *
-	 * @param string $hook Hook suffix.
+	 * @param string $hook Current screen hook.
 	 *
 	 * @return void
 	 */
 	public function enqueue_admin( string $hook ): void {
-		$allowed_hooks = array(
-			'toplevel_page_ibc-enrollment-settings',
-			'ibc-enrollment-settings_page_ibc-enrollment-settings',
-		);
-
-		if ( ! in_array( $hook, $allowed_hooks, true ) ) {
+		if ( false === strpos( $hook, self::DASHBOARD_PAGE_SLUG ) ) {
 			return;
 		}
 
 		wp_enqueue_style(
-			'ibc-admin-settings',
-			IBC_ENROLLMENT_URL . 'admin/assets/css/ibc-admin.css',
-			array(),
+			'ibc-enrollment-admin',
+			IBC_ENROLLMENT_PLUGIN_URL . 'admin/assets/css/admin.css',
+			[],
 			IBC_ENROLLMENT_VERSION
 		);
 
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'capacity'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		wp_enqueue_script(
+			'ibc-enrollment-admin',
+			IBC_ENROLLMENT_PLUGIN_URL . 'admin/assets/js/admin.js',
+			[],
+			IBC_ENROLLMENT_VERSION,
+			true
+		);
 
-		if ( 'formbuilder' === $tab ) {
-			wp_enqueue_script(
-				'ibc-form-builder',
-				IBC_ENROLLMENT_URL . 'admin/assets/js/builder.js',
-				array(),
-				IBC_ENROLLMENT_VERSION,
-				true
-			);
+		wp_localize_script(
+			'ibc-enrollment-admin',
+			'IBCEnrollmentDashboard',
+			[
+				'restUrl' => esc_url_raw( rest_url( RestController::NAMESPACE . '/' ) ),
+				'nonce'   => wp_create_nonce( 'wp_rest' ),
+				'texts'   => [
+					'loginTitle'    => __( 'Accès réservé — IBC Admin', 'ibc-enrollment' ),
+					'loginError'    => __( 'Mot de passe incorrect.', 'ibc-enrollment' ),
+					'ready'         => __( 'Prêt', 'ibc-enrollment' ),
+					'loading'       => __( 'Chargement…', 'ibc-enrollment' ),
+					'refreshed'     => __( 'Données mises à jour.', 'ibc-enrollment' ),
+					'empty'         => __( 'Aucune inscription trouvée.', 'ibc-enrollment' ),
+					'save'          => __( 'Sauver', 'ibc-enrollment' ),
+					'saveSuccess'   => __( 'Inscription mise à jour.', 'ibc-enrollment' ),
+					'saveError'     => __( 'Impossible d’enregistrer les modifications.', 'ibc-enrollment' ),
+					'deleteConfirm' => __( 'Confirmer l’annulation de cette inscription ?', 'ibc-enrollment' ),
+					'deleteDone'    => __( 'Inscription annulée.', 'ibc-enrollment' ),
+					'deleteError'   => __( 'Impossible de supprimer l’inscription.', 'ibc-enrollment' ),
+					'exported'      => __( 'Export CSV généré.', 'ibc-enrollment' ),
+					'docRecto'      => __( 'Recto', 'ibc-enrollment' ),
+					'docVerso'      => __( 'Verso', 'ibc-enrollment' ),
+					'docMissing'    => __( 'Aucun document', 'ibc-enrollment' ),
+					'statusConfirm' => __( 'Confirmé', 'ibc-enrollment' ),
+					'statusCancel'  => __( 'Annulé', 'ibc-enrollment' ),
+				],
+				'brand'   => $this->palette(),
+			]
+		);
+	}
 
-			wp_localize_script(
-				'ibc-form-builder',
-				'IBCBuilder',
-				array(
-					'schema' => $this->form_builder->get_schema(),
-					'types'  => $this->form_builder->get_field_types(),
-					'colors' => ibc_get_brand_colors_with_legacy(),
-					'i18n'   => array(
-						'addField'        => __( 'Ajouter un champ', 'ibc-enrollment-manager' ),
-						'deleteField'     => __( 'Supprimer', 'ibc-enrollment-manager' ),
-						'duplicateField'  => __( 'Dupliquer', 'ibc-enrollment-manager' ),
-						'fieldRequired'   => __( 'Champ obligatoire', 'ibc-enrollment-manager' ),
-						'fieldOptional'   => __( 'Champ actif', 'ibc-enrollment-manager' ),
-						'confirmDelete'   => __( 'Supprimer ce champ du formulaire ?', 'ibc-enrollment-manager' ),
-						'widthFull'       => __( 'Largeur complète', 'ibc-enrollment-manager' ),
-						'widthHalf'       => __( 'Demi-largeur', 'ibc-enrollment-manager' ),
-						'choicesPlaceholder' => __( "Saisissez une option par ligne (valeur|Libellé).", 'ibc-enrollment-manager' ),
-						'lockedField'     => __( 'Ce champ est protégé : vous pouvez modifier son libellé mais pas le supprimer.', 'ibc-enrollment-manager' ),
-						'copy'            => __( 'Copie', 'ibc-enrollment-manager' ),
-						'selectField'     => __( 'Sélectionnez un champ.', 'ibc-enrollment-manager' ),
-						'label'           => __( 'Libellé', 'ibc-enrollment-manager' ),
-						'placeholder'     => __( 'Placeholder', 'ibc-enrollment-manager' ),
-						'type'            => __( 'Type', 'ibc-enrollment-manager' ),
-						'width'           => __( 'Largeur', 'ibc-enrollment-manager' ),
-						'helpText'        => __( 'Texte d’aide', 'ibc-enrollment-manager' ),
-						'choices'         => __( 'Options', 'ibc-enrollment-manager' ),
-						'fileFormats'     => __( 'Formats acceptés', 'ibc-enrollment-manager' ),
-						'previewSubmit'   => __( 'Envoyer', 'ibc-enrollment-manager' ),
-						'newFieldLabel'   => __( 'Nouveau champ', 'ibc-enrollment-manager' ),
-						'selectPlaceholder' => __( 'Sélectionnez…', 'ibc-enrollment-manager' ),
-						'nonJson'         => __( 'Réponse invalide du serveur.', 'ibc-enrollment-manager' ),
-					),
-				)
-			);
-		}
+	/**
+	 * Returns merged palette used for inline vars + JS payloads.
+	 *
+	 * @return array<string,string>
+	 */
+	private function palette(): array {
+		$colors = ibc_get_brand_colors_with_legacy();
+
+		return [
+			'primary'       => $colors['primary'] ?? '#4CB4B4',
+			'primary_dark'  => $colors['primary_dark'] ?? '#3A9191',
+			'primary_light' => $colors['primary_light'] ?? '#E0F5F5',
+			'text_dark'     => $colors['text_dark'] ?? '#1f2937',
+			'text_muted'    => $colors['text_muted'] ?? '#6b7280',
+			'success'       => $colors['success'] ?? '#10b981',
+			'success_bg'    => $colors['success_bg'] ?? '#d1fae5',
+			'danger'        => $colors['danger'] ?? '#ef4444',
+			'danger_bg'     => $colors['danger_bg'] ?? '#fee2e2',
+		];
 	}
 }
