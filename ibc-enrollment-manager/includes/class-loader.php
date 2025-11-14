@@ -11,7 +11,8 @@ namespace IBC\Enrollment\Core;
 
 use IBC\Enrollment\Admin\Dashboard;
 use IBC\Enrollment\Database\DB;
-use IBC\Enrollment\REST\RestController;
+use IBC\Enrollment\Rest\RestController;
+use IBC\Enrollment\Security\Auth;
 use IBC\Enrollment\Services\EmailService;
 use IBC\Enrollment\Services\PdfService;
 use IBC\Enrollment\Services\Registrations;
@@ -48,6 +49,11 @@ class Loader {
 	private RestController $rest;
 
 	/**
+	 * Token-based auth service.
+	 */
+	private Auth $auth;
+
+	/**
 	 * Asset manager (admin + public).
 	 */
 	private Assets $assets;
@@ -75,13 +81,14 @@ class Loader {
 		$this->booted = true;
 
 		$this->db            = DB::instance();
+		$this->auth          = new Auth();
 		$email_service       = new EmailService();
 		$pdf_service         = new PdfService();
 		$this->registrations = new Registrations( $this->db, $email_service, $pdf_service );
-		$this->rest          = new RestController( $this->registrations );
+		$this->rest          = new RestController( $this->registrations, $this->auth );
 		$this->assets        = new Assets();
 		$this->shortcodes    = new Shortcodes( $this->registrations );
-		$this->dashboard     = new Dashboard( $this->registrations );
+		$this->dashboard     = new Dashboard( $this->registrations, $this->auth );
 
 		$this->register_hooks();
 

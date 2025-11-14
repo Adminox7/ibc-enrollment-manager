@@ -1,150 +1,165 @@
 <?php
 /**
- * Authentication utilities.
+ * Lightweight token-based authentication for the admin dashboard + REST.
  *
  * @package IBC\Enrollment
  */
 
-namespace IBC\Enrollment;
+declare( strict_types=1 );
+
+namespace IBC\Enrollment\Security;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Class Auth
+ * Handles password verification and issues ephemeral tokens stored in transients.
  */
 class Auth {
 
-	/**
-	 * Transient TTL for tokens.
-	 */
-	private const TOKEN_TTL = 7200; // 2 hours.
+	private const OPTION_PASSWORD_HASH = 'ibc_admin_token_hash';
+	private const OPTION_LAST_ISSUED   = 'ibc_admin_token_last';
+	private const TOKEN_TTL            = 2 * HOUR_IN_SECONDS;
 
 	/**
-	 * Attempt login with password.
+	 * Attempts to authenticate and returns a signed token on success.
 	 *
-	 * @param string $password Password.
-	 *
+	 * @param string $password Raw password from the modal.
 	 * @return array{success:bool,message?:string,token?:string,ttl?:int}
 	 */
 	public function login( string $password ): array {
 		$password = trim( $password );
 
 		if ( '' === $password ) {
-			return array(
+			return [
 				'success' => false,
-				'message' => \__( 'Mot de passe manquant.', 'ibc-enrollment-manager' ),
-			);
+				'message' => __( 'Mot de passe requis.', 'ibc-enrollment' ),
+			];
 		}
 
-		$hash = (string) get_option( 'ibc_admin_password_hash', '' );
-		if ( '' !== $hash && password_verify( $password, $hash ) ) {
-			return $this->issue_token();
+		$hash = (string) get_option( self::OPTION_PASSWORD_HASH, '' );
+
+		if ( '' === $hash ) {
+			return [
+				'success' => false,
+				'message' => __( 'Aucun mot de passe administrateur n’est configuré.', 'ibc-enrollment' ),
+			];
 		}
 
-		$legacy = (string) get_option( 'ibc_admin_password_plain', '' );
-		if ( '' !== $legacy && hash_equals( $legacy, $password ) ) {
-			return $this->issue_token();
+		if ( ! wp_check_password( $password, $hash ) ) {
+			return [
+				'success' => false,
+				'message' => __( 'Mot de passe invalide.', 'ibc-enrollment' ),
+			];
 		}
 
-		return array(
-			'success' => false,
-			'message' => \__( 'Mot de passe invalide.', 'ibc-enrollment-manager' ),
-		);
+		return $this->issue_token();
 	}
 
 	/**
-	 * Validate token.
-	 *
-	 * @param string $token Token.
+	 * Validates the token present in the current request.
 	 *
 	 * @return bool
 	 */
-	public function validate( string $token ): bool {
+	public function validate_current_request(): bool {
+		return $this->validate_token( $this->extract_token_from_request() );
+	}
+
+	/**
+	 * Validates a provided token string.
+	 *
+	 * @param string|null $token Token string.
+	 * @return bool
+	 */
+	public function validate_token( ?string $token ): bool {
 		if ( empty( $token ) ) {
 			return false;
 		}
 
-		$key    = $this->transient_key( $token );
-		$valid  = false !== get_transient( $key );
+		$key = $this->cache_key( $token );
+		$hit = get_transient( $key );
 
-		if ( ! $valid ) {
-			$this->forget_token( $key );
+		if ( false === $hit ) {
+			return false;
 		}
 
-		return $valid;
+		// Sliding expiration.
+		set_transient( $key, 1, self::TOKEN_TTL );
+
+		return true;
 	}
 
 	/**
-	 * Issue new token.
+	 * Updates the admin password hash.
 	 *
-	 * @return array
+	 * @param string $password Raw password.
+	 * @return void
+	 */
+	public function update_password( string $password ): void {
+		$password = trim( $password );
+
+		if ( '' === $password ) {
+			return;
+		}
+
+		update_option( self::OPTION_PASSWORD_HASH, wp_hash_password( $password ) );
+		delete_option( self::OPTION_LAST_ISSUED );
+	}
+
+	/**
+	 * Issues a brand new token and stores it in a transient.
+	 *
+	 * @return array{success:bool,token:string,ttl:int}
 	 */
 	private function issue_token(): array {
-		$token = wp_generate_password( 64, false, false );
-		$key   = $this->transient_key( $token );
+		$token = bin2hex( random_bytes( 32 ) );
+		$key   = $this->cache_key( $token );
 
 		set_transient( $key, 1, self::TOKEN_TTL );
-		$this->remember_token( $key );
-		update_option( 'ibc_last_token_issued', $token );
+		update_option( self::OPTION_LAST_ISSUED, time() );
 
-		return array(
+		return [
 			'success' => true,
 			'token'   => $token,
 			'ttl'     => self::TOKEN_TTL,
-		);
+		];
 	}
 
 	/**
-	 * Build transient key.
+	 * Computes the cache key associated to a token.
 	 *
-	 * @param string $token Token.
-	 *
+	 * @param string $token Token value.
 	 * @return string
 	 */
-	private function transient_key( string $token ): string {
+	private function cache_key( string $token ): string {
 		return 'ibc_tok_' . hash( 'sha256', $token );
 	}
 
 	/**
-	 * Track active token hash.
+	 * Extracts token from headers, GET or POST payloads.
 	 *
-	 * @param string $hash Hashed key.
-	 *
-	 * @return void
+	 * @return string|null
 	 */
-	private function remember_token( string $hash ): void {
-		$tokens = get_option( 'ibc_active_tokens', array() );
-		if ( ! is_array( $tokens ) ) {
-			$tokens = array();
+	private function extract_token_from_request(): ?string {
+		$headers = function_exists( 'getallheaders' ) ? getallheaders() : [];
+
+		if ( isset( $headers['X-IBC-Token'] ) ) {
+			return sanitize_text_field( (string) $headers['X-IBC-Token'] );
 		}
 
-		foreach ( $tokens as $stored_hash => $timestamp ) {
-			if ( false === get_transient( $stored_hash ) ) {
-				unset( $tokens[ $stored_hash ] );
-			}
+		if ( isset( $_SERVER['HTTP_X_IBC_TOKEN'] ) ) {
+			return sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_X_IBC_TOKEN'] ) );
 		}
 
-		$tokens[ $hash ] = time();
-
-		update_option( 'ibc_active_tokens', $tokens );
-	}
-
-	/**
-	 * Remove token hash from registry.
-	 *
-	 * @param string $hash Token hash.
-	 *
-	 * @return void
-	 */
-	private function forget_token( string $hash ): void {
-		$tokens = get_option( 'ibc_active_tokens', array() );
-		if ( ! is_array( $tokens ) || ! isset( $tokens[ $hash ] ) ) {
-			return;
+		if ( isset( $_GET['ibc_token'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_text_field( wp_unslash( (string) $_GET['ibc_token'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 
-		unset( $tokens[ $hash ] );
-		update_option( 'ibc_active_tokens', $tokens );
+		if ( isset( $_POST['ibc_token'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return sanitize_text_field( wp_unslash( (string) $_POST['ibc_token'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+
+		return null;
 	}
 }

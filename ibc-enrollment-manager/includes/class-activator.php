@@ -69,7 +69,8 @@ class Activator {
 		}
 
 		if ( false === get_option( 'ibc_admin_token_hash', false ) ) {
-			update_option( 'ibc_admin_token_hash', '' );
+			$default_password = apply_filters( 'ibc_enrollment_default_admin_password', 'IBC2025' );
+			update_option( 'ibc_admin_token_hash', wp_hash_password( $default_password ) );
 		}
 
 		if ( false === get_option( 'ibc_admin_token_last', false ) ) {

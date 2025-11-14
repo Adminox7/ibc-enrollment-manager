@@ -76,17 +76,24 @@ function ibc_get_price_prep(): int {
  */
 function ibc_get_brand_colors(): array {
 	$defaults = array(
-		'primary'      => '#4CB4B4',
-		'secondary'    => '#2A8E8E',
-		'text'         => '#1F2937',
-		'muted'        => '#E0F5F5',
-		'border'       => '#E5E7EB',
-		'button'       => '#4CB4B4',
-		'button_text'  => '#FFFFFF',
-		'success_bg'   => '#DCFCE7',
-		'success_text' => '#166534',
-		'error_bg'     => '#FEE2E2',
-		'error_text'   => '#B91C1C',
+		'primary'       => '#4CB4B4',
+		'primary_dark'  => '#3A9191',
+		'primary_light' => '#E0F5F5',
+		'secondary'     => '#2A8E8E',
+		'text'          => '#1F2937',
+		'text_dark'     => '#1F2937',
+		'text_muted'    => '#6B7280',
+		'muted'         => '#E0F5F5',
+		'border'        => '#E5E7EB',
+		'button'        => '#4CB4B4',
+		'button_text'   => '#FFFFFF',
+		'success'       => '#10B981',
+		'success_bg'    => '#D1FAE5',
+		'success_text'  => '#166534',
+		'error_bg'      => '#FEE2E2',
+		'error_text'    => '#B91C1C',
+		'danger'        => '#EF4444',
+		'danger_bg'     => '#FEE2E2',
 	);
 
 	$keys = array_keys( $defaults );
