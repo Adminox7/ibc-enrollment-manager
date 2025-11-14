@@ -1,12 +1,16 @@
 <?php
 /**
- * Registration domain logic.
+ * Registration domain service.
  *
  * @package IBC\Enrollment
  */
 
-namespace IBC\Enrollment;
+declare( strict_types=1 );
 
+namespace IBC\Enrollment\Services;
+
+use IBC\Enrollment\Database\DB;
+use IBC\Enrollment\Support\FormBuilder;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -14,792 +18,406 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Class Registrations
+ * Handles creation, retrieval and updates of enrollment records.
  */
 class Registrations {
 
-	/**
-	 * Database layer.
-	 *
-	 * @var DB
-	 */
-	private DB $db;
+	public function __construct(
+		private DB $db,
+		private EmailService $email,
+		private PdfService $pdf,
+		private FormBuilder $formBuilder,
+	) {}
 
 	/**
-	 * Email handler.
-	 *
-	 * @var Email
+	 * Returns capacity/duplicate snapshot for the front form.
 	 */
-	private Email $email;
+	public function capacitySnapshot( string $email, string $phone ): array {
+		$email     = ibc_normalize_email( $email );
+		$telephone = ibc_normalize_phone( $phone );
+		$total     = $this->db->count_active();
+		$limit     = ibc_get_capacity_limit();
+		$existing  = $this->findDuplicates( $email, $telephone );
 
-	/**
-	 * PDF generator.
-	 *
-	 * @var PDF
-	 */
-	private PDF $pdf;
-
-	/**
-	 * Form builder service.
-	 *
-	 * @var FormBuilder
-	 */
-	private FormBuilder $form_builder;
-
-	/**
-	 * Constructor.
-	 *
-	 * @param DB    $db    Database service.
-	 * @param Email $email Email service.
-	 * @param PDF   $pdf   PDF service.
-	 */
-	public function __construct( DB $db, Email $email, PDF $pdf, FormBuilder $form_builder ) {
-		$this->db           = $db;
-		$this->email        = $email;
-		$this->pdf          = $pdf;
-		$this->form_builder = $form_builder;
-	}
-
-	/**
-	 * Capacity and duplicate info.
-	 *
-	 * @param string $email Email.
-	 * @param string $phone Phone.
-	 *
-	 * @return array
-	 */
-	public function get_capacity_info( string $email, string $phone ): array {
-		$email  = ibc_normalize_email( $email );
-		$phone  = ibc_normalize_phone( $phone );
-		$total  = $this->db->count_active();
-		$limit  = ibc_get_capacity_limit();
-		$exists = $this->find_existing( $email, $phone );
-
-		return array(
+		return [
 			'capacity'    => $limit,
 			'total'       => $total,
-			'existsEmail' => (bool) $exists['email'],
-			'existsPhone' => (bool) $exists['telephone'],
-		);
+			'existsEmail' => (bool) $existing['email'],
+			'existsPhone' => (bool) $existing['telephone'],
+		];
 	}
 
 	/**
-	 * Create a registration record.
+	 * Creates a new registration entry.
 	 *
-	 * @param array $payload  Data payload.
-	 * @param array $files    Uploaded files (cin_recto, cin_verso).
-	 *
+	 * @param array $payload Request body.
+	 * @param array $files   Uploaded files (CIN recto/verso).
 	 * @return array|WP_Error
 	 */
-	public function create_registration( array $payload, array $files = array() ) {
-		$schema           = $this->form_builder->get_active_schema();
-		$allowed_columns  = array(
-			'prenom',
-			'nom',
-			'date_naissance',
-			'lieu_naissance',
-			'email',
-			'telephone',
-			'niveau',
-			'message',
-			'cin_recto_url',
-			'cin_verso_url',
-		);
-		$mapped           = array_fill_keys( $allowed_columns, '' );
-		$notes             = '';
-		$extra_fields      = array();
-		$email_value       = '';
-		$telephone_value   = '';
-		$required_missing  = array();
+	public function create( array $payload, array $files = [] ) {
+		$schema     = $this->formBuilder->getSchema();
+		$mapped     = [];
+		$extras     = [];
+		$notes      = '';
+		$emailValue = '';
+		$phoneValue = '';
+		$missing    = [];
 
 		foreach ( $schema as $field ) {
-			$field_id = $field['id'];
-			$type     = $field['type'] ?? 'text';
-			$map      = sanitize_key( $field['map'] ?? '' );
-			$normalized_map = $map;
-			if ( 'phone' === $normalized_map ) {
-				$normalized_map = 'telephone';
-			}
+			$id       = $field['id'];
+			$type     = $field['type'];
 			$required = ! empty( $field['required'] );
-			$value    = '';
+			$map      = $field['map'] ?? $id;
 
 			if ( 'file' === $type ) {
-				$file = $files[ $field_id ] ?? null;
-				$has_file = $file && isset( $file['tmp_name'] ) && '' !== $file['tmp_name'] && ( $file['error'] ?? UPLOAD_ERR_OK ) === UPLOAD_ERR_OK;
-
-				if ( ! $has_file ) {
-					if ( $required ) {
-						$required_missing[] = $field['label'] ?? $field_id;
-					}
-				} else {
-					$upload = $this->handle_upload( $file );
-					if ( is_wp_error( $upload ) ) {
-						return $upload;
-					}
-					$value = $upload['url'];
+				$value = $this->processUpload( $files[ $id ] ?? null, $required, $field['label'] ?? $id );
+				if ( is_wp_error( $value ) ) {
+					return $value;
 				}
 			} else {
-				$raw   = isset( $payload[ $field_id ] ) ? wp_unslash( $payload[ $field_id ] ) : '';
-				$raw   = is_array( $raw ) ? '' : (string) $raw;
-				$value = $this->sanitize_field_value( $type, $raw );
-
-				if ( 'select' === $type && ! $this->choice_exists( $value, (array) ( $field['choices'] ?? array() ) ) ) {
-					return new WP_Error(
-						'ibc_invalid_field',
-						sprintf(
-							/* translators: %s field label */
-							\__( 'Valeur invalide pour « %s ».', 'ibc-enrollment-manager' ),
-							$field['label'] ?? $field_id
-						)
-					);
+				$value = $this->sanitizeValue( $type, (string) ( $payload[ $id ] ?? '' ) );
+				if ( $required && '' === $value ) {
+					$missing[] = $field['label'] ?? $id;
 				}
 			}
 
-			if ( $required && '' === $value ) {
-				$required_missing[] = $field['label'] ?? $field_id;
+			if ( '' === $value ) {
+				continue;
 			}
 
-			if ( $normalized_map && in_array( $normalized_map, $allowed_columns, true ) ) {
-				if ( 'message' === $normalized_map ) {
-					$notes = ibc_sanitize_textarea( $value );
-				} else {
-					$mapped[ $normalized_map ] = $value;
-				}
-			} else {
-				if ( '' === $value ) {
-					continue;
-				}
+			switch ( $map ) {
+				case 'message':
+					$notes = $value;
+					break;
+				case 'email':
+					$emailValue = $value;
+					$mapped['email'] = $value;
+					break;
+				case 'telephone':
+				case 'phone':
+					$phoneValue = $value;
+					$mapped['telephone'] = $value;
+					break;
+				default:
+					$mapped[ $map ] = $value;
+					break;
+			}
 
-				$extra_fields[] = array(
-					'id'      => $field_id,
-					'label'   => $field['label'] ?? ucfirst( $field_id ),
+			if ( ! in_array( $map, [ 'prenom', 'nom', 'date_naissance', 'lieu_naissance', 'email', 'telephone', 'niveau', 'message', 'cin_recto', 'cin_verso' ], true ) ) {
+				$extras[] = [
+					'id'      => $id,
+					'label'   => $field['label'] ?? ucfirst( $id ),
 					'type'    => $type,
 					'value'   => $value,
-					'display' => 'select' === $type ? $this->choice_label( $value, (array) ( $field['choices'] ?? array() ) ) : $value,
-				);
-			}
-
-			if ( 'email' === $normalized_map || 'email' === $field_id ) {
-				$email_value = $mapped['email'] ?: $value;
-			}
-
-			if ( 'telephone' === $normalized_map || 'telephone' === $field_id || 'phone' === $map || 'phone' === $field_id ) {
-				$telephone_value = $mapped['telephone'] ?: $value;
+					'display' => $value,
+				];
 			}
 		}
 
-		if ( ! empty( $required_missing ) ) {
+		if ( $missing ) {
 			return new WP_Error(
-				'ibc_missing_field',
+				'ibc_missing_fields',
 				sprintf(
-					/* translators: %s list of fields */
-					\__( 'Merci de compléter les champs obligatoires : %s', 'ibc-enrollment-manager' ),
-					implode( ', ', array_map( 'esc_html', $required_missing ) )
+					/* translators: %s missing fields */
+					__( 'Merci de compléter les champs obligatoires : %s.', 'ibc-enrollment' ),
+					implode( ', ', $missing )
 				)
 			);
 		}
 
-		// Ensure essential fields exist.
-		if ( empty( $mapped['prenom'] ) || empty( $mapped['nom'] ) || empty( $mapped['niveau'] ) || empty( $email_value ) || empty( $telephone_value ) ) {
-			return new WP_Error( 'ibc_missing_core', \__( 'Les informations principales sont incomplètes.', 'ibc-enrollment-manager' ) );
+		if ( empty( $mapped['prenom'] ) || empty( $mapped['nom'] ) || empty( $mapped['niveau'] ) || empty( $emailValue ) || empty( $phoneValue ) ) {
+			return new WP_Error( 'ibc_core_missing', __( 'Les informations principales sont incomplètes.', 'ibc-enrollment' ) );
 		}
 
-		// Rate limit per email/phone combination.
-		$rate_key = 'register_' . md5( $email_value . $telephone_value );
-		if ( ibc_rate_limit( $rate_key, 10, false ) ) {
-			return new WP_Error( 'ibc_rate_limit', \__( 'Merci de patienter quelques instants avant de réessayer.', 'ibc-enrollment-manager' ) );
+		if ( $this->isCapacityReached() ) {
+			return new WP_Error( 'ibc_capacity_full', __( 'Les inscriptions sont désormais closes.', 'ibc-enrollment' ) );
 		}
 
-		$capacity = ibc_get_capacity_limit();
-		$total    = $this->db->count_active();
-		if ( $capacity > 0 && $total >= $capacity ) {
-			return new WP_Error( 'ibc_capacity_full', \__( 'Les inscriptions sont complètes pour le moment.', 'ibc-enrollment-manager' ) );
-		}
-
-		$duplicates = $this->find_existing( $email_value, $telephone_value );
+		$duplicates = $this->findDuplicates( $emailValue, $phoneValue );
 		if ( $duplicates['email'] || $duplicates['telephone'] ) {
-			return new WP_Error(
-				'ibc_duplicate',
-				\__( 'Une inscription existe déjà avec cet email ou ce numéro de téléphone.', 'ibc-enrollment-manager' )
-			);
+			return new WP_Error( 'ibc_duplicate', __( 'Une inscription existe déjà avec ces coordonnées.', 'ibc-enrollment' ) );
 		}
 
-		$reference = $this->generate_unique_reference();
+		$reference = $this->uniqueReference();
 		$timestamp = ibc_now();
-		$full_name = trim( $mapped['prenom'] . ' ' . $mapped['nom'] );
+		$fullName  = trim( sprintf( '%s %s', $mapped['prenom'], $mapped['nom'] ) );
 
-		$row = array(
-			'created_at'     => $timestamp,
-			'updated_at'     => $timestamp,
-			'reference'      => $reference,
+		$row = [
+			'timestamp'      => $timestamp,
 			'prenom'         => $mapped['prenom'],
 			'nom'            => $mapped['nom'],
-			'date_naissance' => '' !== $mapped['date_naissance'] ? $mapped['date_naissance'] : null,
-			'lieu_naissance' => '' !== $mapped['lieu_naissance'] ? $mapped['lieu_naissance'] : null,
-			'email'          => $email_value,
-			'telephone'      => $telephone_value,
+			'date_naissance' => $this->normalizeDate( $mapped['date_naissance'] ?? '' ),
+			'lieu_naissance' => $mapped['lieu_naissance'] ?? '',
+			'email'          => $emailValue,
+			'telephone'      => $phoneValue,
 			'niveau'         => $mapped['niveau'],
-			'message'        => $this->encode_message_payload( $notes, $extra_fields ),
-			'cin_recto_url'  => '' !== $mapped['cin_recto_url'] ? $mapped['cin_recto_url'] : null,
-			'cin_verso_url'  => '' !== $mapped['cin_verso_url'] ? $mapped['cin_verso_url'] : null,
+			'message'        => $this->encodeMessage( $notes, $extras ),
+			'cin_recto'      => $mapped['cin_recto'] ?? '',
+			'cin_verso'      => $mapped['cin_verso'] ?? '',
+			'pdf_url'        => '',
 			'statut'         => 'Confirme',
-		);
+			'reference'      => $reference,
+		];
 
-		$insert_id = $this->db->insert( $row );
-		if ( ! $insert_id ) {
-			return new WP_Error( 'ibc_insert_failed', \__( 'Impossible d’enregistrer votre demande. Merci de réessayer.', 'ibc-enrollment-manager' ) );
+		$insertId = $this->db->insert( $row );
+		if ( ! $insertId ) {
+			return new WP_Error( 'ibc_insert_failed', __( 'Impossible d’enregistrer votre demande. Merci de réessayer.', 'ibc-enrollment' ) );
 		}
 
-		$context = array(
-			'fullName'       => $full_name,
-			'email'          => $email_value,
-			'telephone'      => $telephone_value,
-			'phone'          => $telephone_value,
+		$context = [
+			'full_name'      => $fullName,
+			'email'          => $emailValue,
+			'telephone'      => $phoneValue,
 			'level'          => $mapped['niveau'],
 			'reference'      => $reference,
-			'ref'            => $reference,
-			'createdAt'      => wp_date( 'd/m/Y H:i', strtotime( $timestamp ) ),
 			'created_at'     => $timestamp,
-			'payDeadline'    => wp_date( 'd/m/Y H:i', strtotime( '+24 hours' ) ),
-			'price'          => ibc_get_price_prep() . ' MAD',
+			'deadline'       => wp_date( 'd/m/Y H:i', strtotime( '+24 hours', strtotime( $timestamp ) ) ),
 			'price_numeric'  => ibc_get_price_prep(),
-			'notes'          => $notes,
-			'extra'          => $extra_fields,
-			'dateNaissance'  => ibc_format_date_human( $mapped['date_naissance'] ),
-			'lieuNaissance'  => $mapped['lieu_naissance'],
-			'date_naissance' => $mapped['date_naissance'],
-			'lieu_naissance' => $mapped['lieu_naissance'],
-		);
+			'price'          => ibc_get_price_prep() . ' MAD',
+			'message'        => $notes,
+			'extra'          => $extras,
+			'date_naissance' => $mapped['date_naissance'] ?? '',
+			'lieu_naissance' => $mapped['lieu_naissance'] ?? '',
+		];
 
-		$pdf_path    = '';
-		$pdf_mediaId = 0;
-		$pdf_url     = '';
-
-		$pdf_result = $this->pdf->generate_prep_receipt(
-			array(
-				'fullName'       => $context['fullName'],
-				'email'          => $context['email'],
-				'telephone'      => $context['telephone'],
-				'level'          => $context['level'],
-				'reference'      => $context['reference'],
-				'createdAt'      => $context['created_at'],
-				'createdAtHuman' => $context['createdAt'],
-				'payDeadline'    => $context['payDeadline'],
-				'price'          => $context['price'],
-				'price_numeric'  => $context['price_numeric'],
-				'notes'          => $notes,
-				'extra'          => $extra_fields,
-				'dateNaissance'  => $context['dateNaissance'],
-				'lieuNaissance'  => $context['lieuNaissance'],
-			)
-		);
-
-		if ( ! is_wp_error( $pdf_result ) ) {
-			if ( is_array( $pdf_result ) ) {
-				$pdf_path = isset( $pdf_result['path'] ) ? (string) $pdf_result['path'] : '';
-				$pdf_url  = isset( $pdf_result['url'] ) ? (string) $pdf_result['url'] : $pdf_url;
-			} else {
-				$pdf_path = (string) $pdf_result;
-			}
-
-			if ( $pdf_path ) {
-				$attachment = $this->register_pdf_attachment( $pdf_path, $reference );
-				if ( ! is_wp_error( $attachment ) ) {
-					$pdf_mediaId = (int) $attachment['id'];
-					$pdf_url     = (string) $attachment['url'];
-				}
-			}
+		$pdfResult = $this->pdf->generateReceipt( new EnrollmentData( $context ) );
+		if ( ! is_wp_error( $pdfResult ) ) {
+			$row['pdf_url'] = $pdfResult->url;
+			$this->db->update_by_reference( $reference, [ 'pdf_url' => $pdfResult->url ] );
 		}
 
-		if ( ! empty( $pdf_url ) ) {
-			$context['receiptUrl'] = $pdf_url;
-		}
-
-		$email_payload = array(
-			'email'          => $email_value,
-			'telephone'      => $telephone_value,
-			'reference'      => $reference,
-			'niveau'         => $mapped['niveau'],
-			'date_naissance' => $mapped['date_naissance'],
-			'lieu_naissance' => $mapped['lieu_naissance'],
-			'context'        => $context,
-			'receipt_url'    => $pdf_url,
+		$this->email->send_confirmation(
+			array_merge( $context, [ 'pdf_url' => $row['pdf_url'] ] ),
+			! is_wp_error( $pdfResult ) ? $pdfResult->path : null,
+			sprintf( 'recu-prepa-%s.pdf', sanitize_title( $reference ) )
 		);
 
-		$this->email->send_confirmation( $email_payload, $pdf_path );
-
-		ibc_rate_limit( $rate_key, 10 );
-
-		return array(
-			'id'             => $insert_id,
-			'reference'      => $reference,
-			'ref'            => $reference,
-			'email'          => $email_value,
-			'telephone'      => $telephone_value,
-			'created_at'     => $timestamp,
-			'updated_at'     => $timestamp,
-			'status'         => 'Confirme',
-			'receipt_path'   => $pdf_path,
-			'receiptPath'    => $pdf_path,
-			'receipt_id'     => $pdf_mediaId,
-			'receiptId'      => $pdf_mediaId,
-			'receipt_url'    => $pdf_url,
-			'receiptUrl'     => $pdf_url,
-			'downloadUrl'    => $pdf_url,
-			'pdf_available'  => ! empty( $pdf_url ),
-			'pdfAvailable'   => ! empty( $pdf_url ),
-			'extraFields'    => $extra_fields,
-			'messageNotes'   => $notes,
-		);
+		return [
+			'id'          => $insertId,
+			'reference'   => $reference,
+			'created_at'  => $timestamp,
+			'pdf_url'     => $row['pdf_url'],
+			'email'       => $emailValue,
+			'telephone'   => $phoneValue,
+			'status'      => 'Confirme',
+			'extraFields' => $extras,
+		];
 	}
 
 	/**
-	 * Retrieve registrations.
-	 *
-	 * @param array $args Arguments.
-	 *
-	 * @return array
+	 * Lists registrations for the admin dashboard.
 	 */
-	public function get_registrations( array $args = array() ): array {
-		$records = $this->db->query( $args );
-		$total   = $this->db->count_filtered(
-			array(
+	public function list( array $args = [] ): array {
+		$items = $this->db->query( $args );
+		$total = $this->db->count_filtered(
+			[
 				'search' => $args['search'] ?? '',
 				'niveau' => $args['niveau'] ?? '',
 				'statut' => $args['statut'] ?? '',
-			)
+			]
 		);
-		$output  = array();
 
-		foreach ( $records as $row ) {
-			$message = $this->decode_message_payload( $row['message'] );
+		$rows = array_map(
+			function ( array $row ): array {
+				$message = $this->decodeMessage( $row['message'] ?? '' );
 
-			$output[] = array(
-				'row'            => (int) $row['id'],
-				'created_at'     => $row['created_at'],
-				'timestamp'      => $row['created_at'],
-				'updated_at'     => $row['updated_at'],
-				'prenom'         => $row['prenom'],
-				'nom'            => $row['nom'],
-				'fullName'       => trim( $row['prenom'] . ' ' . $row['nom'] ),
-				'dateNaissance'  => ibc_format_date_human( $row['date_naissance'] ),
-				'date_naissance' => $row['date_naissance'],
-				'lieuNaissance'  => $row['lieu_naissance'],
-				'email'          => $row['email'],
-				'telephone'      => $row['telephone'],
-				'phone'          => $row['telephone'],
-				'level'          => $row['niveau'],
-				'message'        => $message['notes'],
-				'extraFields'    => $message['extra'],
-				'cinRectoUrl'    => $row['cin_recto_url'],
-				'cinVersoUrl'    => $row['cin_verso_url'],
-				'reference'      => $row['reference'],
-				'ref'            => $row['reference'],
-				'statut'         => $row['statut'],
-			);
-		}
+				return [
+					'row'           => (int) $row['id'],
+					'timestamp'     => $row['timestamp'],
+					'prenom'        => $row['prenom'],
+					'nom'           => $row['nom'],
+					'fullName'      => trim( $row['prenom'] . ' ' . $row['nom'] ),
+					'dateNaissance' => ibc_format_date_human( $row['date_naissance'] ),
+					'lieuNaissance' => $row['lieu_naissance'],
+					'email'         => $row['email'],
+					'telephone'     => $row['telephone'],
+					'niveau'        => $row['niveau'],
+					'message'       => $message['notes'],
+					'extraFields'   => $message['extra'],
+					'cinRectoUrl'   => $row['cin_recto'],
+					'cinVersoUrl'   => $row['cin_verso'],
+					'ref'           => $row['reference'],
+					'statut'        => $row['statut'],
+					'pdfUrl'        => $row['pdf_url'],
+				];
+			},
+			$items
+		);
 
-		return array(
-			'items' => $output,
+		return [
+			'items' => $rows,
 			'total' => $total,
-		);
+		];
 	}
 
 	/**
-	 * Update registration.
-	 *
-	 * @param int   $id     Row id.
-	 * @param array $fields Fields.
-	 *
-	 * @return bool|WP_Error
+	 * Updates editable fields.
 	 */
-	public function update_registration( int $id, array $fields ) {
-		$allowed     = array( 'prenom', 'nom', 'date_naissance', 'lieu_naissance', 'email', 'telephone', 'niveau', 'message', 'statut', 'cin_recto_url', 'cin_verso_url' );
-		$data        = array();
-		$new_notes   = null;
-		$current_row = null;
+	public function update( int $id, array $fields ) {
+		$allowed = [ 'prenom', 'nom', 'date_naissance', 'lieu_naissance', 'email', 'telephone', 'niveau', 'message', 'statut' ];
+		$data    = [];
 
 		foreach ( $allowed as $key ) {
 			if ( ! array_key_exists( $key, $fields ) ) {
 				continue;
 			}
 
-			$value = $fields[ $key ];
-
 			switch ( $key ) {
 				case 'email':
-					$value = ibc_normalize_email( (string) $value );
+					$data['email'] = ibc_normalize_email( (string) $fields[ $key ] );
 					break;
 				case 'telephone':
-					$value = ibc_normalize_phone( (string) $value );
+					$data['telephone'] = ibc_normalize_phone( (string) $fields[ $key ] );
 					break;
 				case 'date_naissance':
-					$value = $this->sanitize_date_for_storage( (string) $value );
+					$data['date_naissance'] = $this->normalizeDate( (string) $fields[ $key ] );
 					break;
 				case 'message':
-					$new_notes = ibc_sanitize_textarea( (string) $value );
-					continue 2;
-				case 'statut':
-					$value = $this->normalize_status( (string) $value );
-					if ( ! $value ) {
-						return new WP_Error( 'ibc_status', \__( 'Statut invalide.', 'ibc-enrollment-manager' ) );
+					$current = $this->db->get( $id );
+					if ( ! $current ) {
+						return new WP_Error( 'ibc_not_found', __( 'Inscription introuvable.', 'ibc-enrollment' ) );
 					}
+					$decoded             = $this->decodeMessage( $current['message'] ?? '' );
+					$decoded['notes']    = ibc_sanitize_textarea( (string) $fields[ $key ] );
+					$data['message']     = $this->encodeMessage( $decoded['notes'], $decoded['extra'] );
 					break;
-				case 'cin_recto_url':
-				case 'cin_verso_url':
-					$value = esc_url_raw( (string) $value );
+				case 'statut':
+					$status = $this->normalizeStatus( (string) $fields[ $key ] );
+					if ( ! $status ) {
+						return new WP_Error( 'ibc_status', __( 'Statut invalide.', 'ibc-enrollment' ) );
+					}
+					$data['statut'] = $status;
 					break;
 				default:
-					$value = sanitize_text_field( (string) $value );
+					$data[ $key ] = sanitize_text_field( (string) $fields[ $key ] );
 					break;
 			}
-
-			$data[ $key ] = $value;
 		}
 
 		if ( empty( $data ) ) {
 			return false;
 		}
 
-		if ( null !== $new_notes ) {
-			$current_row = $current_row ?? $this->db->get( $id );
-			if ( $current_row ) {
-				$decoded         = $this->decode_message_payload( $current_row['message'] );
-				$decoded['notes'] = $new_notes;
-				$data['message']  = $this->encode_message_payload( $decoded['notes'], $decoded['extra'] );
-			} else {
-				$data['message'] = $this->encode_message_payload( $new_notes, array() );
-			}
-		}
-
-		$data['updated_at'] = ibc_now();
-
 		return $this->db->update( $id, $data );
 	}
 
 	/**
-	 * Sanitize a field value based on type.
-	 *
-	 * @param string $type  Field type.
-	 * @param string $value Raw value.
-	 *
-	 * @return string
+	 * Soft delete via reference.
 	 */
-	private function sanitize_field_value( string $type, string $value ): string {
-		switch ( $type ) {
-			case 'email':
-				return ibc_normalize_email( $value );
-			case 'tel':
-				return ibc_normalize_phone( $value );
-			case 'date':
-				$sanitized = $this->sanitize_date_for_storage( $value );
-				return $sanitized ?? '';
-			case 'textarea':
-				return ibc_sanitize_textarea( $value );
-			default:
-				return sanitize_text_field( $value );
-		}
+	public function cancelByReference( string $reference ): bool {
+		return $this->db->soft_cancel( sanitize_text_field( $reference ) );
 	}
 
-	/**
-	 * Normalize date input to Y-m-d or null.
-	 *
-	 * @param string $value Raw value.
-	 *
-	 * @return string|null
-	 */
-	private function sanitize_date_for_storage( string $value ): ?string {
-		$value = trim( $value );
+	/* -------------------------------------------------------------------------
+	 * Internals
+	 * ---------------------------------------------------------------------- */
 
+	private function sanitizeValue( string $type, string $value ): string {
+		return match ( $type ) {
+			'email'    => ibc_normalize_email( $value ),
+			'tel'      => ibc_normalize_phone( $value ),
+			'textarea' => ibc_sanitize_textarea( $value ),
+			'date'     => $this->normalizeDate( $value ) ?? '',
+			default    => sanitize_text_field( $value ),
+		};
+	}
+
+	private function normalizeDate( string $value ): ?string {
+		$value = trim( $value );
 		if ( '' === $value ) {
 			return null;
 		}
-
 		if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
 			return $value;
 		}
-
 		if ( preg_match( '/^\d{2}\/\d{2}\/\d{4}$/', $value ) ) {
-			$parts = explode( '/', $value );
-
-			return sprintf( '%04d-%02d-%02d', (int) $parts[2], (int) $parts[1], (int) $parts[0] );
+			[ $d, $m, $y ] = array_map( 'intval', explode( '/', $value ) );
+			return sprintf( '%04d-%02d-%02d', $y, $m, $d );
 		}
-
 		$timestamp = strtotime( $value );
-
-		if ( false === $timestamp ) {
-			return null;
-		}
-
-		return gmdate( 'Y-m-d', $timestamp );
+		return $timestamp ? gmdate( 'Y-m-d', $timestamp ) : null;
 	}
 
-	/**
-	 * Check if a select choice exists.
-	 *
-	 * @param string $value   Value.
-	 * @param array  $choices Choices.
-	 *
-	 * @return bool
-	 */
-	private function choice_exists( string $value, array $choices ): bool {
-		if ( '' === $value ) {
-			return true;
-		}
-
-		foreach ( $choices as $choice ) {
-			if ( ! is_array( $choice ) ) {
-				$choice = array(
-					'value' => (string) $choice,
-					'label' => (string) $choice,
-				);
-			}
-			if ( isset( $choice['value'] ) && (string) $choice['value'] === $value ) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	/**
-	 * Retrieve the display label for a choice value.
-	 *
-	 * @param string $value   Value.
-	 * @param array  $choices Choices.
-	 *
-	 * @return string
-	 */
-	private function choice_label( string $value, array $choices ): string {
-		foreach ( $choices as $choice ) {
-			if ( ! is_array( $choice ) ) {
-				$choice = array(
-					'value' => (string) $choice,
-					'label' => (string) $choice,
-				);
-			}
-			if ( isset( $choice['value'] ) && (string) $choice['value'] === $value ) {
-				return (string) ( $choice['label'] ?? $value );
-			}
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Encode notes and extra fields into message column.
-	 *
-	 * @param string $notes Notes.
-	 * @param array  $extra Extra fields.
-	 *
-	 * @return string
-	 */
-	private function encode_message_payload( string $notes, array $extra ): string {
-		$payload = array(
-			'notes' => $notes,
-			'extra' => array_values( $extra ),
-		);
-
-		return wp_json_encode( $payload );
-	}
-
-	/**
-	 * Decode message column payload.
-	 *
-	 * @param string $raw Raw message.
-	 *
-	 * @return array{notes:string,extra:array}
-	 */
-	private function decode_message_payload( string $raw ): array {
-		$data = json_decode( $raw, true );
-
-		if ( is_array( $data ) && array_key_exists( 'extra', $data ) ) {
-			return array(
-				'notes' => isset( $data['notes'] ) ? ibc_sanitize_textarea( (string) $data['notes'] ) : '',
-				'extra' => is_array( $data['extra'] ) ? $data['extra'] : array(),
-			);
-		}
-
-		return array(
-			'notes' => ibc_sanitize_textarea( $raw ),
-			'extra' => array(),
-		);
-	}
-
-	/**
-	 * Soft delete by reference.
-	 *
-	 * @param string $reference Reference.
-	 *
-	 * @return bool
-	 */
-	public function cancel_by_reference( string $reference ): bool {
-		return $this->db->soft_delete_by_ref( sanitize_text_field( $reference ) );
-	}
-
-	/**
-	 * Find duplicates.
-	 *
-	 * @param string $email Email.
-	 * @param string $phone Phone.
-	 *
-	 * @return array{email:array|null,telephone:array|null}
-	 */
-	private function find_existing( string $email, string $phone ): array {
-		$email_row     = null;
-		$telephone_row = null;
-
-		if ( $email ) {
-			$email_row = $this->db->get_by_email( $email );
-			if ( $email_row && 'Annule' === $email_row['statut'] ) {
-				$email_row = null;
-			}
-		}
-
-		if ( $phone ) {
-			$telephone_row = $this->db->get_by_phone( $phone );
-			if ( $telephone_row && 'Annule' === $telephone_row['statut'] ) {
-				$telephone_row = null;
-			}
-		}
-
-		return array(
-			'email'      => $email_row,
-			'telephone'  => $telephone_row,
-		);
-	}
-
-	/**
-	 * Handle upload via wp_handle_upload.
-	 *
-	 * @param array $file File data.
-	 *
-	 * @return array|WP_Error
-	 */
-	private function handle_upload( array $file ) {
-		if ( empty( $file['tmp_name'] ) ) {
-			return array( 'url' => '' );
-		}
-
-		$allowed_extensions = array( 'jpg', 'jpeg', 'png', 'pdf' );
-		$checked            = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'], array(
-			'jpg'  => 'image/jpeg',
-			'jpeg' => 'image/jpeg',
-			'png'  => 'image/png',
-			'pdf'  => 'application/pdf',
-		) );
-
-		$ext  = strtolower( $checked['ext'] ?? '' );
-		$type = $checked['type'] ?? '';
-
-		if ( empty( $ext ) || ! in_array( $ext, $allowed_extensions, true ) ) {
-			return new WP_Error( 'ibc_upload_type', \__( 'Format de fichier non autorisé.', 'ibc-enrollment-manager' ) );
-		}
-
-		if ( empty( $type ) ) {
-			$mime_map = array(
-				'jpg'  => 'image/jpeg',
-				'jpeg' => 'image/jpeg',
-				'png'  => 'image/png',
-				'pdf'  => 'application/pdf',
-			);
-			$type = $mime_map[ $ext ] ?? 'application/octet-stream';
+	private function processUpload( ?array $file, bool $required, string $label ) {
+		if ( empty( $file ) || empty( $file['tmp_name'] ) ) {
+			return $required ? new WP_Error( 'ibc_upload_missing', sprintf( __( 'Merci de fournir %s.', 'ibc-enrollment' ), $label ) ) : '';
 		}
 
 		if ( ! function_exists( 'wp_handle_upload' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 		}
 
-		$uploaded = wp_handle_upload(
+		$upload = wp_handle_upload(
 			$file,
-			array(
+			[
 				'test_form' => false,
-				'mimes'     => array(
+				'mimes'     => [
 					'jpg'  => 'image/jpeg',
 					'jpeg' => 'image/jpeg',
 					'png'  => 'image/png',
 					'pdf'  => 'application/pdf',
-				),
-			)
+				],
+			]
 		);
 
-		if ( isset( $uploaded['error'] ) ) {
-			return new WP_Error( 'ibc_upload_error', $uploaded['error'] );
+		if ( isset( $upload['error'] ) ) {
+			return new WP_Error( 'ibc_upload_error', $upload['error'] );
 		}
 
-		return $uploaded;
+		return $upload['url'] ?? '';
 	}
 
-	/**
-	 * Generate unique reference.
-	 *
-	 * @return string
-	 */
-	private function generate_unique_reference(): string {
-		$reference = ibc_generate_reference();
+	private function encodeMessage( string $notes, array $extra ): string {
+		return wp_json_encode(
+			[
+				'notes' => ibc_sanitize_textarea( $notes ),
+				'extra' => array_values( $extra ),
+			]
+		);
+	}
 
-		while ( $this->db->get_by_ref( $reference ) ) {
-			$reference = ibc_generate_reference();
+	private function decodeMessage( string $raw ): array {
+		$data = json_decode( $raw, true );
+
+		if ( is_array( $data ) && isset( $data['extra'] ) ) {
+			return [
+				'notes' => ibc_sanitize_textarea( (string) ( $data['notes'] ?? '' ) ),
+				'extra' => is_array( $data['extra'] ) ? $data['extra'] : [],
+			];
 		}
+
+		return [
+			'notes' => ibc_sanitize_textarea( $raw ),
+			'extra' => [],
+		];
+	}
+
+	private function uniqueReference(): string {
+		do {
+			$reference = ibc_generate_reference();
+		} while ( $this->db->get_by_reference( $reference ) );
 
 		return $reference;
 	}
 
-	/**
-	 * Normalize status input.
-	 *
-	 * @param string $status Status.
-	 *
-	 * @return string
-	 */
-	private function normalize_status( string $status ): string {
+	private function normalizeStatus( string $status ): string {
 		$status = strtolower( $status );
-
-		if ( in_array( $status, array( 'confirme', 'confirmé', 'confirmed' ), true ) ) {
-			return 'Confirme';
-		}
-
-		if ( in_array( $status, array( 'annule', 'annulé', 'cancelled', 'canceled' ), true ) ) {
-			return 'Annule';
-		}
-
-		return '';
+		return match ( true ) {
+			in_array( $status, [ 'confirme', 'confirmé', 'confirmed' ], true ) => 'Confirme',
+			in_array( $status, [ 'annule', 'annulé', 'cancelled', 'canceled' ], true ) => 'Annule',
+			default => '',
+		};
 	}
 
-	/**
-	 * Insert PDF as attachment.
-	 *
-	 * @param string $path File path.
-	 * @param string $reference Reference.
-	 *
-	 * @return array|WP_Error
-	 */
-	private function register_pdf_attachment( string $path, string $reference ) {
-		$filetype = wp_check_filetype( basename( $path ), null );
+	private function findDuplicates( string $email, string $phone ): array {
+		return [
+			'email'     => $email ? $this->db->get_by_email( $email ) : null,
+			'telephone' => $phone ? $this->db->get_by_phone( $phone ) : null,
+		];
+	}
 
-		$upload_dir = wp_upload_dir();
-		$relative   = str_replace( trailingslashit( $upload_dir['basedir'] ), '', $path );
-		$url        = trailingslashit( $upload_dir['baseurl'] ) . $relative;
-
-		$attachment = array(
-			'post_mime_type' => $filetype['type'] ?? 'application/pdf',
-			'post_title'     => sanitize_text_field( $reference ),
-			'post_content'   => '',
-			'post_status'    => 'inherit',
-			'guid'           => $url,
-		);
-
-		$attach_id = wp_insert_attachment( $attachment, $path );
-		if ( is_wp_error( $attach_id ) ) {
-			return $attach_id;
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/image.php';
-		wp_update_attachment_metadata( $attach_id, wp_generate_attachment_metadata( $attach_id, $path ) );
-
-		return array(
-			'id'  => $attach_id,
-			'url' => wp_get_attachment_url( $attach_id ),
-		);
+	private function isCapacityReached(): bool {
+		$limit = ibc_get_capacity_limit();
+		return $limit > 0 && $this->db->count_active() >= $limit;
 	}
 }

@@ -198,33 +198,35 @@ class DB {
 	}
 
 	/**
-	 * Returns the first active registration matching email or phone.
-	 *
-	 * @param string $email Normalized email.
-	 * @param string $phone Normalized phone.
-	 * @return array|null
+	 * Retrieves a single row by normalized email.
 	 */
-	public function find_duplicate( string $email, string $phone ): ?array {
-		$clauses = [];
-		$params  = [];
-
-		if ( $email ) {
-			$clauses[] = 'email = %s';
-			$params[]  = $email;
-		}
-
-		if ( $phone ) {
-			$clauses[] = 'telephone = %s';
-			$params[]  = $phone;
-		}
-
-		if ( empty( $clauses ) ) {
+	public function get_by_email( string $email ): ?array {
+		if ( '' === $email ) {
 			return null;
 		}
 
-		$sql = "SELECT * FROM {$this->table} WHERE statut <> 'Annule' AND (" . implode( ' OR ', $clauses ) . ') LIMIT 1';
+		$sql = $this->wpdb->prepare(
+			"SELECT * FROM {$this->table} WHERE email = %s LIMIT 1",
+			$email
+		);
 
-		$sql = $this->wpdb->prepare( $sql, $params );
+		$row = $this->wpdb->get_row( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		return $row ?: null;
+	}
+
+	/**
+	 * Retrieves a single row by normalized phone.
+	 */
+	public function get_by_phone( string $phone ): ?array {
+		if ( '' === $phone ) {
+			return null;
+		}
+
+		$sql = $this->wpdb->prepare(
+			"SELECT * FROM {$this->table} WHERE telephone = %s LIMIT 1",
+			$phone
+		);
 
 		$row = $this->wpdb->get_row( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
